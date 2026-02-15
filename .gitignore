@@ -73,6 +73,10 @@ conversations/
 .env.*
 openrouter_config.yaml
 java_to_python_config.yaml
-.md
+
+# Documentation (keep only DEMO_GUIDE.md)
+*.md
+!DEMO_GUIDE.md
+
 # Ollama logs
 ollama.log
