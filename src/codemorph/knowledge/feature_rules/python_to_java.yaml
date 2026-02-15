@@ -1,0 +1,256 @@
+# Feature Mapping Rules: Python → Java
+# These rules guide the LLM on how to translate Python-specific constructs to Java
+
+rules:
+  - id: PY_LIST_COMP
+    name: "List Comprehension"
+    source_language: python
+    target_language: java
+    description: "Convert Python list comprehensions to Java Stream API"
+    premise: "["
+    instruction: |
+      Convert list comprehensions to Java Stream API.
+      Example: [x * 2 for x in numbers] becomes:
+      numbers.stream().map(x -> x * 2).collect(Collectors.toList())
+    validation: "stream("
+    priority: 5
+    examples:
+      - source: "[x for x in items]"
+        target: "items.stream().collect(Collectors.toList())"
+      - source: "[x * 2 for x in numbers if x > 0]"
+        target: "numbers.stream().filter(x -> x > 0).map(x -> x * 2).collect(Collectors.toList())"
+
+  - id: PY_DICT_COMP
+    name: "Dictionary Comprehension"
+    source_language: python
+    target_language: java
+    description: "Convert Python dict comprehensions to Java Streams"
+    premise: "{"
+    instruction: |
+      Convert dictionary comprehensions to Java Stream API with Collectors.toMap().
+      Use appropriate key/value mappers.
+    validation: "toMap("
+    priority: 5
+
+  - id: PY_CONTEXT_MGR
+    name: "Context Manager (with statement)"
+    source_language: python
+    target_language: java
+    description: "Convert with statements to try-with-resources"
+    premise: "with "
+    instruction: |
+      Convert 'with' statements to Java try-with-resources.
+      Example: with open(file) as f: becomes:
+      try (BufferedReader f = new BufferedReader(new FileReader(file))) { ... }
+    validation: "try ("
+    priority: 8
+
+  - id: PY_F_STRING
+    name: "F-String Formatting"
+    source_language: python
+    target_language: java
+    description: "Convert f-strings to String.format or StringBuilder"
+    premise: 'f"'
+    instruction: |
+      Convert f-strings to String.format() for simple cases or StringBuilder for complex ones.
+      Example: f"Hello {name}, you are {age}" becomes:
+      String.format("Hello %s, you are %d", name, age)
+    priority: 3
+
+  - id: PY_NONE
+    name: "None to null"
+    source_language: python
+    target_language: java
+    description: "Convert Python None to Java null"
+    premise: "None"
+    instruction: "Replace all occurrences of 'None' with 'null'"
+    validation: "null"
+    priority: 1
+
+  - id: PY_BOOL
+    name: "Boolean True/False"
+    source_language: python
+    target_language: java
+    description: "Convert Python True/False to Java true/false"
+    premise: "True"
+    instruction: "Replace 'True' with 'true' and 'False' with 'false' (lowercase)"
+    validation: "true"
+    priority: 1
+
+  - id: PY_LEN
+    name: "len() function"
+    source_language: python
+    target_language: java
+    description: "Convert len() to .length or .size()"
+    premise: "len("
+    instruction: |
+      Replace len(obj) with:
+      - obj.length for arrays
+      - obj.size() for Collections (List, Set, Map)
+      - obj.length() for Strings
+    priority: 2
+
+  - id: PY_PRINT
+    name: "print() function"
+    source_language: python
+    target_language: java
+    description: "Convert print() to System.out.println()"
+    premise: "print("
+    instruction: "Replace print(...) with System.out.println(...)"
+    validation: "System.out.println"
+    priority: 2
+
+  - id: PY_RANGE
+    name: "range() function"
+    source_language: python
+    target_language: java
+    description: "Convert range() to for loop or IntStream"
+    premise: "range("
+    instruction: |
+      Convert range(n) to:
+      - Traditional for loop: for (int i = 0; i < n; i++)
+      - Or IntStream: IntStream.range(0, n)
+    validation: "for ("
+    priority: 4
+
+  - id: PY_LAMBDA
+    name: "Lambda expressions"
+    source_language: python
+    target_language: java
+    description: "Convert Python lambdas to Java lambdas"
+    premise: "lambda "
+    instruction: |
+      Convert Python lambda to Java lambda expression.
+      Example: lambda x: x + 1 becomes (x) -> x + 1
+      Example: lambda x, y: x + y becomes (x, y) -> x + y
+    validation: "->"
+    priority: 6
+
+  - id: PY_SELF
+    name: "self parameter"
+    source_language: python
+    target_language: java
+    description: "Remove self parameter, use this"
+    premise: "def "
+    instruction: |
+      In class methods:
+      - Remove 'self' from parameter list (it's implicit in Java)
+      - Replace 'self.attribute' with 'this.attribute'
+      - self is not needed in Java; use 'this' only when necessary for clarity
+    priority: 7
+
+  - id: PY_ISINSTANCE
+    name: "isinstance() checks"
+    source_language: python
+    target_language: java
+    description: "Convert isinstance to instanceof"
+    premise: "isinstance("
+    instruction: "Replace isinstance(obj, Type) with (obj instanceof Type)"
+    validation: "instanceof"
+    priority: 3
+
+  - id: PY_TRY_EXCEPT
+    name: "Exception handling"
+    source_language: python
+    target_language: java
+    description: "Convert try/except to try/catch"
+    premise: "except "
+    instruction: |
+      Convert Python exception handling to Java:
+      - 'except' becomes 'catch'
+      - Map Python exceptions to Java equivalents:
+        * KeyError -> NoSuchElementException or use Optional
+        * ValueError -> IllegalArgumentException
+        * TypeError -> ClassCastException
+        * FileNotFoundError -> FileNotFoundException
+        * Exception -> Exception
+      - 'finally' remains the same
+    validation: "catch"
+    priority: 6
+
+  - id: PY_RAISE
+    name: "raise statement"
+    source_language: python
+    target_language: java
+    description: "Convert raise to throw"
+    premise: "raise "
+    instruction: "Replace 'raise ExceptionType(message)' with 'throw new ExceptionType(message)'"
+    validation: "throw new"
+    priority: 4
+
+  - id: PY_LIST_METHODS
+    name: "List methods"
+    source_language: python
+    target_language: java
+    description: "Convert Python list methods to Java List/ArrayList methods"
+    premise: ".append("
+    instruction: |
+      Convert Python list methods:
+      - list.append(x) -> list.add(x)
+      - list.extend(other) -> list.addAll(other)
+      - list.pop() -> list.remove(list.size() - 1)
+      - list.remove(x) -> list.remove(x)
+      - list.clear() -> list.clear()
+    priority: 3
+
+  - id: PY_STRING_METHODS
+    name: "String methods"
+    source_language: python
+    target_language: java
+    description: "Convert Python string methods to Java String methods"
+    premise: ".lower("
+    instruction: |
+      Convert Python string methods:
+      - str.lower() -> str.toLowerCase()
+      - str.upper() -> str.toUpperCase()
+      - str.strip() -> str.trim()
+      - str.split() -> str.split("\\s+")
+      - str.replace(old, new) -> str.replace(old, new)
+      - str.startswith(prefix) -> str.startsWith(prefix)
+    priority: 2
+
+  - id: PY_DICT_ACCESS
+    name: "Dictionary access"
+    source_language: python
+    target_language: java
+    description: "Convert dict access to Map.get()"
+    premise: "["
+    instruction: |
+      Convert dictionary operations to Java Map:
+      - dict[key] -> map.get(key)
+      - dict[key] = value -> map.put(key, value)
+      - key in dict -> map.containsKey(key)
+      - dict.get(key, default) -> map.getOrDefault(key, default)
+      - dict.keys() -> map.keySet()
+      - dict.values() -> map.values()
+    priority: 4
+
+  - id: PY_MULTIPLE_RETURN
+    name: "Multiple return values"
+    source_language: python
+    target_language: java
+    description: "Handle Python tuple unpacking"
+    premise: "return "
+    instruction: |
+      Python allows returning multiple values via tuples.
+      In Java, either:
+      - Create a custom result class with appropriate fields
+      - Use a generic Pair/Triple class
+      - Return an array or List
+      Choose based on the context and type safety requirements.
+    priority: 6
+
+  - id: PY_DECORATORS
+    name: "Decorators"
+    source_language: python
+    target_language: java
+    description: "Handle Python decorators"
+    premise: "@"
+    instruction: |
+      Python decorators have no direct Java equivalent.
+      Options:
+      - Use annotations where applicable (@Override, @Deprecated, etc.)
+      - Implement the decorator logic explicitly in the code
+      - Use Aspect-Oriented Programming (AOP) for cross-cutting concerns
+      - For property decorators, use getters/setters
+    priority: 9

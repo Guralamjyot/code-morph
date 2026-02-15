@@ -1,0 +1,37 @@
+[
+  {
+    "id": "java_list_comprehension_01",
+    "language": "java",
+    "category": "iteration",
+    "description": "Java Stream API for list transformation (Python list comprehension equivalent)",
+    "code": "public List<Integer> doubleNumbers(List<Integer> numbers) {\n    return numbers.stream()\n        .map(n -> n * 2)\n        .collect(Collectors.toList());\n}"
+  },
+  {
+    "id": "java_list_filter_01",
+    "language": "java",
+    "category": "iteration",
+    "description": "Java Stream API for filtering (Python filter equivalent)",
+    "code": "public List<String> filterLongNames(List<String> names) {\n    return names.stream()\n        .filter(name -> name.length() > 5)\n        .collect(Collectors.toList());\n}"
+  },
+  {
+    "id": "java_dict_comprehension_01",
+    "language": "java",
+    "category": "iteration",
+    "description": "Java Stream API for map transformation (Python dict comprehension equivalent)",
+    "code": "public Map<String, Integer> createNameLengthMap(List<String> names) {\n    return names.stream()\n        .collect(Collectors.toMap(\n            name -> name,\n            name -> name.length()\n        ));\n}"
+  },
+  {
+    "id": "java_reduce_01",
+    "language": "java",
+    "category": "iteration",
+    "description": "Java Stream reduce for aggregation (Python reduce/sum equivalent)",
+    "code": "public int sumNumbers(List<Integer> numbers) {\n    return numbers.stream()\n        .reduce(0, Integer::sum);\n}"
+  },
+  {
+    "id": "java_groupby_01",
+    "language": "java",
+    "category": "iteration",
+    "description": "Java Stream groupingBy for grouping data",
+    "code": "public Map<Integer, List<Person>> groupByAge(List<Person> people) {\n    return people.stream()\n        .collect(Collectors.groupingBy(Person::getAge));\n}"
+  }
+]

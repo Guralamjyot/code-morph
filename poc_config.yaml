@@ -1,0 +1,28 @@
+project:
+  name: thealgorithms_poc
+  source:
+    language: java
+    version: "17"
+    root: ./examples/thealgorithms_java/src
+    test_root: ./examples/thealgorithms_java/tests
+  target:
+    language: python
+    version: "3.11"
+    output_dir: ./output/thealgorithms_poc
+
+llm:
+  provider: openai
+  model: gpt-4o-mini
+  temperature: 0.2
+
+translation:
+  max_retries_type_check: 3
+  max_retries_semantics: 2
+  allow_mocking: true
+
+verification:
+  generate_tests: false
+  equivalence_check: true
+  execution_timeout: 30
+
+checkpoint_mode: auto

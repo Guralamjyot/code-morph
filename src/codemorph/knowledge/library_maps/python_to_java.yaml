@@ -1,0 +1,498 @@
+# Python to Java Library Mappings
+# Built-in mappings for common Python libraries and their Java equivalents
+#
+# These mappings are loaded automatically and are considered pre-verified.
+# For unknown libraries, the LLM will suggest mappings and user verification is requested.
+
+mappings:
+  # ============================================================================
+  # Standard Library Equivalents
+  # ============================================================================
+
+  - source: json
+    target: com.fasterxml.jackson.databind
+    maven: "com.fasterxml.jackson.core:jackson-databind:2.15.0"
+    imports:
+      - com.fasterxml.jackson.databind.ObjectMapper
+      - com.fasterxml.jackson.core.JsonProcessingException
+      - com.fasterxml.jackson.core.type.TypeReference
+    notes: |
+      Use ObjectMapper for JSON serialization/deserialization.
+      json.dumps() → objectMapper.writeValueAsString()
+      json.loads() → objectMapper.readValue()
+
+  - source: logging
+    target: org.slf4j
+    maven: "org.slf4j:slf4j-api:2.0.9"
+    imports:
+      - org.slf4j.Logger
+      - org.slf4j.LoggerFactory
+    notes: |
+      Use LoggerFactory.getLogger(ClassName.class) to get logger instance.
+      logging.info() → logger.info()
+      logging.error() → logger.error()
+      Add logback-classic as runtime implementation.
+
+  - source: re
+    target: java.util.regex
+    maven: null  # Built into Java
+    imports:
+      - java.util.regex.Pattern
+      - java.util.regex.Matcher
+    notes: |
+      Use Pattern.compile() for regex patterns.
+      re.match() → pattern.matcher().matches()
+      re.search() → pattern.matcher().find()
+      re.findall() → collect matches using while(matcher.find())
+
+  - source: datetime
+    target: java.time
+    maven: null  # Built into Java 8+
+    imports:
+      - java.time.LocalDateTime
+      - java.time.LocalDate
+      - java.time.LocalTime
+      - java.time.ZonedDateTime
+      - java.time.Instant
+      - java.time.format.DateTimeFormatter
+    notes: |
+      datetime.datetime → LocalDateTime or ZonedDateTime
+      datetime.date → LocalDate
+      datetime.time → LocalTime
+      datetime.now() → LocalDateTime.now()
+
+  - source: os
+    target: java.nio.file
+    maven: null  # Built into Java
+    imports:
+      - java.nio.file.Files
+      - java.nio.file.Path
+      - java.nio.file.Paths
+      - java.io.File
+    notes: |
+      os.path.join() → Path.of() or Paths.get()
+      os.path.exists() → Files.exists()
+      os.makedirs() → Files.createDirectories()
+      os.listdir() → Files.list()
+
+  - source: pathlib
+    target: java.nio.file
+    maven: null
+    imports:
+      - java.nio.file.Path
+      - java.nio.file.Paths
+      - java.nio.file.Files
+    notes: |
+      Path() → Path.of() or Paths.get()
+      path.exists() → Files.exists(path)
+      path.read_text() → Files.readString(path)
+
+  - source: collections
+    target: java.util
+    maven: null
+    imports:
+      - java.util.HashMap
+      - java.util.LinkedHashMap
+      - java.util.ArrayList
+      - java.util.LinkedList
+      - java.util.ArrayDeque
+      - java.util.Collections
+    notes: |
+      defaultdict → HashMap with computeIfAbsent()
+      Counter → Map with merge() or HashMap with manual counting
+      deque → ArrayDeque
+      OrderedDict → LinkedHashMap
+
+  - source: itertools
+    target: java.util.stream
+    maven: null
+    imports:
+      - java.util.stream.Stream
+      - java.util.stream.Collectors
+      - java.util.stream.IntStream
+    notes: |
+      itertools.chain() → Stream.concat()
+      itertools.filter() → stream.filter()
+      itertools.map() → stream.map()
+      itertools.zip() → IntStream with manual zipping
+
+  - source: functools
+    target: java.util.function
+    maven: null
+    imports:
+      - java.util.function.Function
+      - java.util.function.Predicate
+      - java.util.function.Consumer
+      - java.util.function.Supplier
+    notes: |
+      functools.partial() → Use lambda expressions
+      functools.reduce() → stream.reduce()
+      @lru_cache → Consider Caffeine or Guava caching
+
+  - source: typing
+    target: null  # Java has native type system
+    maven: null
+    imports: []
+    notes: |
+      Python type hints map directly to Java types.
+      List[int] → List<Integer>
+      Dict[str, Any] → Map<String, Object>
+      Optional[str] → String (nullable) or Optional<String>
+
+  - source: io
+    target: java.io
+    maven: null
+    imports:
+      - java.io.InputStream
+      - java.io.OutputStream
+      - java.io.ByteArrayInputStream
+      - java.io.ByteArrayOutputStream
+      - java.io.BufferedReader
+      - java.io.BufferedWriter
+    notes: |
+      io.StringIO → StringWriter/StringReader
+      io.BytesIO → ByteArrayOutputStream/ByteArrayInputStream
+
+  - source: hashlib
+    target: java.security
+    maven: null
+    imports:
+      - java.security.MessageDigest
+      - java.security.NoSuchAlgorithmException
+    notes: |
+      hashlib.sha256() → MessageDigest.getInstance("SHA-256")
+      hashlib.md5() → MessageDigest.getInstance("MD5")
+      Use digest.update() and digest.digest()
+
+  - source: base64
+    target: java.util.Base64
+    maven: null
+    imports:
+      - java.util.Base64
+    notes: |
+      base64.b64encode() → Base64.getEncoder().encode()
+      base64.b64decode() → Base64.getDecoder().decode()
+
+  - source: subprocess
+    target: java.lang.ProcessBuilder
+    maven: null
+    imports:
+      - java.lang.ProcessBuilder
+      - java.lang.Process
+    notes: |
+      subprocess.run() → new ProcessBuilder(...).start()
+      Use process.waitFor() for blocking calls.
+
+  - source: threading
+    target: java.util.concurrent
+    maven: null
+    imports:
+      - java.util.concurrent.ExecutorService
+      - java.util.concurrent.Executors
+      - java.util.concurrent.Future
+      - java.util.concurrent.CompletableFuture
+    notes: |
+      threading.Thread → Implement Runnable or extend Thread
+      Prefer ExecutorService for thread pools.
+
+  - source: multiprocessing
+    target: java.util.concurrent
+    maven: null
+    imports:
+      - java.util.concurrent.ForkJoinPool
+      - java.util.concurrent.ExecutorService
+      - java.util.concurrent.Executors
+    notes: |
+      multiprocessing.Pool → Executors.newFixedThreadPool()
+      Java threads are lightweight; no need for separate processes.
+
+  # ============================================================================
+  # Testing Frameworks
+  # ============================================================================
+
+  - source: unittest
+    target: org.junit.jupiter
+    maven: "org.junit.jupiter:junit-jupiter:5.10.0"
+    imports:
+      - org.junit.jupiter.api.Test
+      - org.junit.jupiter.api.BeforeEach
+      - org.junit.jupiter.api.AfterEach
+      - org.junit.jupiter.api.Assertions
+      - org.junit.jupiter.api.DisplayName
+    notes: |
+      TestCase class → Test class with @Test methods
+      setUp() → @BeforeEach
+      tearDown() → @AfterEach
+      assertEqual() → assertEquals()
+
+  - source: pytest
+    target: org.junit.jupiter
+    maven: "org.junit.jupiter:junit-jupiter:5.10.0"
+    imports:
+      - org.junit.jupiter.api.Test
+      - org.junit.jupiter.api.BeforeEach
+      - org.junit.jupiter.api.AfterEach
+      - org.junit.jupiter.api.Assertions
+      - org.junit.jupiter.params.ParameterizedTest
+      - org.junit.jupiter.params.provider.ValueSource
+    notes: |
+      test_* functions → @Test methods
+      @pytest.fixture → @BeforeEach
+      pytest.raises() → assertThrows()
+      @pytest.mark.parametrize → @ParameterizedTest
+
+  - source: mock
+    target: org.mockito
+    maven: "org.mockito:mockito-core:5.7.0"
+    imports:
+      - org.mockito.Mockito
+      - org.mockito.Mock
+      - org.mockito.InjectMocks
+      - org.mockito.junit.jupiter.MockitoExtension
+    notes: |
+      @patch → @Mock annotation
+      MagicMock() → Mockito.mock()
+      mock.return_value → when(...).thenReturn()
+
+  # ============================================================================
+  # HTTP and Web
+  # ============================================================================
+
+  - source: requests
+    target: java.net.http.HttpClient
+    maven: null  # Built into Java 11+
+    imports:
+      - java.net.http.HttpClient
+      - java.net.http.HttpRequest
+      - java.net.http.HttpResponse
+      - java.net.URI
+    notes: |
+      requests.get() → HttpClient.send(HttpRequest.newBuilder().GET()...)
+      requests.post() → HttpClient.send(HttpRequest.newBuilder().POST()...)
+      response.json() → parse response body with Jackson
+      For more features, consider OkHttp.
+
+  - source: urllib
+    target: java.net
+    maven: null
+    imports:
+      - java.net.URL
+      - java.net.URLEncoder
+      - java.net.URLDecoder
+      - java.net.HttpURLConnection
+    notes: |
+      urllib.parse.quote() → URLEncoder.encode()
+      urllib.parse.unquote() → URLDecoder.decode()
+
+  - source: flask
+    target: org.springframework.boot
+    maven: "org.springframework.boot:spring-boot-starter-web:3.2.0"
+    imports:
+      - org.springframework.boot.SpringApplication
+      - org.springframework.boot.autoconfigure.SpringBootApplication
+      - org.springframework.web.bind.annotation.RestController
+      - org.springframework.web.bind.annotation.GetMapping
+      - org.springframework.web.bind.annotation.PostMapping
+    notes: |
+      @app.route() → @GetMapping/@PostMapping
+      Flask app → @SpringBootApplication class
+      request.args → @RequestParam
+      request.json → @RequestBody
+
+  - source: fastapi
+    target: org.springframework.boot
+    maven: "org.springframework.boot:spring-boot-starter-web:3.2.0"
+    imports:
+      - org.springframework.boot.SpringApplication
+      - org.springframework.boot.autoconfigure.SpringBootApplication
+      - org.springframework.web.bind.annotation.RestController
+      - org.springframework.web.bind.annotation.RequestMapping
+    notes: |
+      FastAPI and Spring Boot share similar REST patterns.
+      Pydantic models → Java record classes or POJOs
+      async def → CompletableFuture or reactive Spring WebFlux
+
+  # ============================================================================
+  # Data Processing
+  # ============================================================================
+
+  - source: pandas
+    target: tech.tablesaw
+    maven: "tech.tablesaw:tablesaw-core:0.43.1"
+    imports:
+      - tech.tablesaw.api.Table
+      - tech.tablesaw.api.DoubleColumn
+      - tech.tablesaw.api.StringColumn
+    notes: |
+      DataFrame → Table
+      pandas.read_csv() → Table.read().csv()
+      For heavy data processing, consider Apache Spark.
+
+  - source: numpy
+    target: org.nd4j
+    maven: "org.nd4j:nd4j-native-platform:1.0.0-M2.1"
+    imports:
+      - org.nd4j.linalg.factory.Nd4j
+      - org.nd4j.linalg.api.ndarray.INDArray
+    notes: |
+      numpy.array() → Nd4j.create()
+      For simpler use cases, consider ejml or apache commons math.
+
+  # ============================================================================
+  # Database
+  # ============================================================================
+
+  - source: sqlalchemy
+    target: org.hibernate
+    maven: "org.hibernate.orm:hibernate-core:6.4.0.Final"
+    imports:
+      - jakarta.persistence.Entity
+      - jakarta.persistence.Table
+      - jakarta.persistence.Column
+      - jakarta.persistence.Id
+      - org.hibernate.SessionFactory
+    notes: |
+      SQLAlchemy models → @Entity classes
+      session.query() → Hibernate Criteria API or JPQL
+      Consider Spring Data JPA for easier integration.
+
+  - source: sqlite3
+    target: java.sql
+    maven: "org.xerial:sqlite-jdbc:3.44.0.0"
+    imports:
+      - java.sql.Connection
+      - java.sql.DriverManager
+      - java.sql.PreparedStatement
+      - java.sql.ResultSet
+    notes: |
+      sqlite3.connect() → DriverManager.getConnection("jdbc:sqlite:...")
+      cursor.execute() → PreparedStatement.executeQuery/executeUpdate()
+
+  # ============================================================================
+  # CLI and Args
+  # ============================================================================
+
+  - source: argparse
+    target: info.picocli
+    maven: "info.picocli:picocli:4.7.5"
+    imports:
+      - picocli.CommandLine
+      - picocli.CommandLine.Command
+      - picocli.CommandLine.Option
+      - picocli.CommandLine.Parameters
+    notes: |
+      ArgumentParser → @Command annotated class
+      add_argument() → @Option or @Parameters fields
+      args.value → field value after CommandLine.populateCommand()
+
+  - source: click
+    target: info.picocli
+    maven: "info.picocli:picocli:4.7.5"
+    imports:
+      - picocli.CommandLine
+      - picocli.CommandLine.Command
+      - picocli.CommandLine.Option
+    notes: |
+      @click.command() → @Command
+      @click.option() → @Option
+      Similar decorator-to-annotation mapping.
+
+  # ============================================================================
+  # Serialization
+  # ============================================================================
+
+  - source: pickle
+    target: java.io.Serializable
+    maven: null
+    imports:
+      - java.io.Serializable
+      - java.io.ObjectOutputStream
+      - java.io.ObjectInputStream
+    notes: |
+      pickle.dump() → ObjectOutputStream.writeObject()
+      pickle.load() → ObjectInputStream.readObject()
+      Consider JSON for cross-language compatibility.
+
+  - source: yaml
+    target: org.yaml.snakeyaml
+    maven: "org.yaml:snakeyaml:2.2"
+    imports:
+      - org.yaml.snakeyaml.Yaml
+    notes: |
+      yaml.safe_load() → new Yaml().load()
+      yaml.dump() → new Yaml().dump()
+
+  - source: toml
+    target: com.moandjiezana.toml
+    maven: "com.moandjiezana.toml:toml4j:0.7.2"
+    imports:
+      - com.moandjiezana.toml.Toml
+    notes: |
+      toml.load() → new Toml().read()
+
+  # ============================================================================
+  # Utilities
+  # ============================================================================
+
+  - source: dataclasses
+    target: lombok
+    maven: "org.projectlombok:lombok:1.18.30"
+    imports:
+      - lombok.Data
+      - lombok.Builder
+      - lombok.AllArgsConstructor
+      - lombok.NoArgsConstructor
+    notes: |
+      @dataclass → @Data (or use Java records in Java 16+)
+      Auto-generates getters, setters, equals, hashCode, toString.
+      For Java 16+, prefer: public record ClassName(Type field) {}
+
+  - source: attrs
+    target: lombok
+    maven: "org.projectlombok:lombok:1.18.30"
+    imports:
+      - lombok.Data
+      - lombok.Builder
+    notes: |
+      @attrs.define → @Data
+      Similar to dataclasses mapping.
+
+  - source: pydantic
+    target: jakarta.validation
+    maven: "jakarta.validation:jakarta.validation-api:3.0.2"
+    imports:
+      - jakarta.validation.constraints.NotNull
+      - jakarta.validation.constraints.Size
+      - jakarta.validation.constraints.Email
+    notes: |
+      Pydantic models → Java classes with validation annotations
+      Use Hibernate Validator as implementation.
+      Consider Java records with validation.
+
+  - source: uuid
+    target: java.util.UUID
+    maven: null
+    imports:
+      - java.util.UUID
+    notes: |
+      uuid.uuid4() → UUID.randomUUID()
+      str(uuid) → uuid.toString()
+
+  - source: copy
+    target: java.lang.Cloneable
+    maven: null
+    imports:
+      - java.lang.Cloneable
+    notes: |
+      copy.copy() → implement Cloneable and clone()
+      copy.deepcopy() → implement deep clone or use serialization
+      Consider using copy constructors instead.
+
+  - source: enum
+    target: java.lang.Enum
+    maven: null
+    imports: []
+    notes: |
+      Python Enum → Java enum
+      @unique → Java enums are unique by default
+      enum.auto() → ordinal values (implicit)

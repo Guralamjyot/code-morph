@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(chmod:*)",
+      "Bash(codemorph translate:*)",
+      "Bash(ollama list:*)",
+      "Bash(java:*)",
+      "Bash(pip install:*)",
+      "Bash(python:*)",
+      "WebSearch",
+      "Bash(curl:*)",
+      "Bash(python3:*)",
+      "Bash(apt list:*)",
+      "Bash(apt-cache search:*)",
+      "Bash(gh api:*)",
+      "Bash(export JAVA_HOME=\"/workspace/persistent/java/jdk-17.0.2\")",
+      "Bash(export PATH=\"$JAVA_HOME/bin:$PATH\")",
+      "Bash(javac:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(BASE=\"https://raw.githubusercontent.com/javatuples/javatuples/master/src/test/java/org/javatuples\")",
+      "Bash(DEST=\"/tmp/javatuples_raw/src/test/java/org/javatuples\")",
+      "Bash(__NEW_LINE_5a13d3dc50da4355__ echo \"Downloading Test.java ...\")",
+      "Bash(if [ $? -eq 0 ])",
+      "Bash([ -s \"$DEST/Test.java\" ])",
+      "Bash(then)",
+      "Bash(else)",
+      "Bash(fi)",
+      "Bash(source:*)",
+      "Bash($JAVA_HOME/bin/javac -d /tmp/javatuples_classes src/*.java)",
+      "Bash($JAVA_HOME/bin/javac:*)",
+      "Bash(wc:*)"
+    ]
+  }
+}

@@ -1,0 +1,23 @@
+[
+  {
+    "id": "java_exception_handling_01",
+    "language": "java",
+    "category": "error_handling",
+    "description": "Standard Java exception handling pattern with try-catch",
+    "code": "public void processData(Data data) throws ValidationException {\n    if (data == null) {\n        throw new IllegalArgumentException(\"Data cannot be null\");\n    }\n    \n    try {\n        validate(data);\n        transform(data);\n        save(data);\n    } catch (ValidationException e) {\n        logger.error(\"Validation failed: {}\", e.getMessage());\n        throw e;\n    } catch (IOException e) {\n        logger.error(\"IO error during processing\", e);\n        throw new ProcessingException(\"Failed to save data\", e);\n    }\n}"
+  },
+  {
+    "id": "java_exception_handling_02",
+    "language": "java",
+    "category": "error_handling",
+    "description": "Try-with-resources for automatic resource management",
+    "code": "public String readFile(Path filePath) throws IOException {\n    try (BufferedReader reader = Files.newBufferedReader(filePath, StandardCharsets.UTF_8)) {\n        return reader.lines()\n            .collect(Collectors.joining(\"\\n\"));\n    }\n}"
+  },
+  {
+    "id": "java_exception_handling_03",
+    "language": "java",
+    "category": "error_handling",
+    "description": "Multiple catch blocks with specific exception types",
+    "code": "public void updateRecord(String id, Map<String, Object> updates) {\n    try {\n        Record record = repository.findById(id)\n            .orElseThrow(() -> new RecordNotFoundException(\"Record not found: \" + id));\n        \n        record.update(updates);\n        repository.save(record);\n        \n    } catch (RecordNotFoundException e) {\n        logger.warn(\"Record not found: {}\", id);\n        throw e;\n    } catch (ValidationException e) {\n        logger.error(\"Invalid updates: {}\", e.getMessage());\n        throw new IllegalArgumentException(\"Invalid updates\", e);\n    } catch (Exception e) {\n        logger.error(\"Unexpected error updating record\", e);\n        throw new RuntimeException(\"Failed to update record\", e);\n    }\n}"
+  }
+]

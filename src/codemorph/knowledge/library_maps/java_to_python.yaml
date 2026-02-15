@@ -1,0 +1,537 @@
+# Java to Python Library Mappings
+# This file defines the standard mappings from Java libraries to Python equivalents.
+# The agent will use these mappings when translating Java code to Python.
+
+# Format:
+# source_library: The Java package/library
+# target_library: The Python equivalent
+# pip_package: The pip package to install (if not stdlib)
+# target_imports: Common imports needed in Python
+# notes: Any special considerations for the mapping
+
+mappings:
+  # =============================================================================
+  # Java Standard Library -> Python Standard Library
+  # =============================================================================
+
+  # Collections
+  - source_library: "java.util.List"
+    target_library: "list"
+    target_imports: []
+    notes: "Use Python's built-in list type"
+
+  - source_library: "java.util.ArrayList"
+    target_library: "list"
+    target_imports: []
+    notes: "Use Python's built-in list type"
+
+  - source_library: "java.util.LinkedList"
+    target_library: "collections.deque"
+    target_imports: ["from collections import deque"]
+    notes: "Use deque for efficient append/pop from both ends"
+
+  - source_library: "java.util.Map"
+    target_library: "dict"
+    target_imports: []
+    notes: "Use Python's built-in dict type"
+
+  - source_library: "java.util.HashMap"
+    target_library: "dict"
+    target_imports: []
+    notes: "Use Python's built-in dict type"
+
+  - source_library: "java.util.TreeMap"
+    target_library: "collections.OrderedDict"
+    target_imports: ["from collections import OrderedDict"]
+    notes: "For sorted keys, consider sortedcontainers.SortedDict"
+
+  - source_library: "java.util.Set"
+    target_library: "set"
+    target_imports: []
+    notes: "Use Python's built-in set type"
+
+  - source_library: "java.util.HashSet"
+    target_library: "set"
+    target_imports: []
+    notes: "Use Python's built-in set type"
+
+  - source_library: "java.util.TreeSet"
+    target_library: "sortedcontainers.SortedSet"
+    pip_package: "sortedcontainers"
+    target_imports: ["from sortedcontainers import SortedSet"]
+    notes: "For sorted sets, use sortedcontainers library"
+
+  - source_library: "java.util.Queue"
+    target_library: "queue.Queue"
+    target_imports: ["from queue import Queue"]
+    notes: "Use queue module for thread-safe queues"
+
+  - source_library: "java.util.PriorityQueue"
+    target_library: "heapq"
+    target_imports: ["import heapq"]
+    notes: "Use heapq module with a list for priority queue"
+
+  - source_library: "java.util.Stack"
+    target_library: "list"
+    target_imports: []
+    notes: "Use list with append() and pop() methods"
+
+  - source_library: "java.util.Vector"
+    target_library: "list"
+    target_imports: []
+    notes: "Use Python's built-in list type"
+
+  # Utilities
+  - source_library: "java.util.Arrays"
+    target_library: "list"
+    target_imports: []
+    notes: "Use list comprehensions and built-in functions"
+
+  - source_library: "java.util.Collections"
+    target_library: "collections"
+    target_imports: ["import collections"]
+    notes: "Use collections module and built-in functions"
+
+  - source_library: "java.util.Optional"
+    target_library: "typing.Optional"
+    target_imports: ["from typing import Optional"]
+    notes: "Use Optional type hint or None directly"
+
+  - source_library: "java.util.Objects"
+    target_library: ""
+    target_imports: []
+    notes: "Use Python's built-in comparison operators"
+
+  - source_library: "java.util.Random"
+    target_library: "random"
+    target_imports: ["import random"]
+    notes: "Direct mapping to random module"
+
+  - source_library: "java.util.UUID"
+    target_library: "uuid"
+    target_imports: ["import uuid"]
+    notes: "Direct mapping to uuid module"
+
+  # Streams and Functional
+  - source_library: "java.util.stream"
+    target_library: ""
+    target_imports: []
+    notes: "Use list comprehensions, generator expressions, or itertools"
+
+  - source_library: "java.util.function"
+    target_library: "typing.Callable"
+    target_imports: ["from typing import Callable"]
+    notes: "Use Callable type hints and lambdas"
+
+  # Date/Time
+  - source_library: "java.time.LocalDate"
+    target_library: "datetime.date"
+    target_imports: ["from datetime import date"]
+    notes: "Direct mapping to datetime.date"
+
+  - source_library: "java.time.LocalTime"
+    target_library: "datetime.time"
+    target_imports: ["from datetime import time"]
+    notes: "Direct mapping to datetime.time"
+
+  - source_library: "java.time.LocalDateTime"
+    target_library: "datetime.datetime"
+    target_imports: ["from datetime import datetime"]
+    notes: "Direct mapping to datetime.datetime"
+
+  - source_library: "java.time.ZonedDateTime"
+    target_library: "datetime.datetime"
+    target_imports: ["from datetime import datetime, timezone"]
+    notes: "Use datetime with timezone info"
+
+  - source_library: "java.time.Duration"
+    target_library: "datetime.timedelta"
+    target_imports: ["from datetime import timedelta"]
+    notes: "Direct mapping to timedelta"
+
+  - source_library: "java.time.Instant"
+    target_library: "datetime.datetime"
+    target_imports: ["from datetime import datetime, timezone"]
+    notes: "Use datetime.now(timezone.utc)"
+
+  - source_library: "java.time.format.DateTimeFormatter"
+    target_library: "datetime.datetime.strftime"
+    target_imports: ["from datetime import datetime"]
+    notes: "Use strftime/strptime methods"
+
+  - source_library: "java.util.Date"
+    target_library: "datetime.datetime"
+    target_imports: ["from datetime import datetime"]
+    notes: "Legacy Java date, map to datetime"
+
+  - source_library: "java.util.Calendar"
+    target_library: "datetime.datetime"
+    target_imports: ["from datetime import datetime"]
+    notes: "Legacy Java calendar, map to datetime"
+
+  # I/O
+  - source_library: "java.io.File"
+    target_library: "pathlib.Path"
+    target_imports: ["from pathlib import Path"]
+    notes: "Use pathlib for modern file handling"
+
+  - source_library: "java.nio.file.Path"
+    target_library: "pathlib.Path"
+    target_imports: ["from pathlib import Path"]
+    notes: "Direct mapping to pathlib.Path"
+
+  - source_library: "java.nio.file.Files"
+    target_library: "pathlib.Path"
+    target_imports: ["from pathlib import Path"]
+    notes: "Use Path methods for file operations"
+
+  - source_library: "java.io.BufferedReader"
+    target_library: "open"
+    target_imports: []
+    notes: "Use built-in open() with context manager"
+
+  - source_library: "java.io.BufferedWriter"
+    target_library: "open"
+    target_imports: []
+    notes: "Use built-in open() with context manager"
+
+  - source_library: "java.io.FileReader"
+    target_library: "open"
+    target_imports: []
+    notes: "Use built-in open() with context manager"
+
+  - source_library: "java.io.FileWriter"
+    target_library: "open"
+    target_imports: []
+    notes: "Use built-in open() with context manager"
+
+  - source_library: "java.io.InputStream"
+    target_library: "io.BytesIO"
+    target_imports: ["from io import BytesIO"]
+    notes: "Use io module for stream operations"
+
+  - source_library: "java.io.OutputStream"
+    target_library: "io.BytesIO"
+    target_imports: ["from io import BytesIO"]
+    notes: "Use io module for stream operations"
+
+  - source_library: "java.io.PrintStream"
+    target_library: "print"
+    target_imports: []
+    notes: "Use built-in print function"
+
+  - source_library: "java.io.PrintWriter"
+    target_library: "open"
+    target_imports: []
+    notes: "Use built-in open() with context manager"
+
+  # Strings and Text
+  - source_library: "java.lang.String"
+    target_library: "str"
+    target_imports: []
+    notes: "Use Python's built-in str type"
+
+  - source_library: "java.lang.StringBuilder"
+    target_library: "io.StringIO"
+    target_imports: ["from io import StringIO"]
+    notes: "Use StringIO or list.join() for string building"
+
+  - source_library: "java.lang.StringBuffer"
+    target_library: "io.StringIO"
+    target_imports: ["from io import StringIO"]
+    notes: "Use StringIO or list.join() for string building"
+
+  - source_library: "java.util.regex.Pattern"
+    target_library: "re"
+    target_imports: ["import re"]
+    notes: "Use re.compile() for patterns"
+
+  - source_library: "java.util.regex.Matcher"
+    target_library: "re"
+    target_imports: ["import re"]
+    notes: "Use re.match(), re.search(), re.findall()"
+
+  - source_library: "java.text.MessageFormat"
+    target_library: "str.format"
+    target_imports: []
+    notes: "Use f-strings or str.format()"
+
+  # Math
+  - source_library: "java.lang.Math"
+    target_library: "math"
+    target_imports: ["import math"]
+    notes: "Direct mapping to math module"
+
+  - source_library: "java.math.BigDecimal"
+    target_library: "decimal.Decimal"
+    target_imports: ["from decimal import Decimal"]
+    notes: "Direct mapping to decimal.Decimal"
+
+  - source_library: "java.math.BigInteger"
+    target_library: "int"
+    target_imports: []
+    notes: "Python int has arbitrary precision"
+
+  # Networking
+  - source_library: "java.net.URL"
+    target_library: "urllib.parse"
+    target_imports: ["from urllib.parse import urlparse"]
+    notes: "Use urllib.parse for URL handling"
+
+  - source_library: "java.net.URI"
+    target_library: "urllib.parse"
+    target_imports: ["from urllib.parse import urlparse"]
+    notes: "Use urllib.parse for URI handling"
+
+  - source_library: "java.net.HttpURLConnection"
+    target_library: "urllib.request"
+    target_imports: ["import urllib.request"]
+    notes: "Consider using requests library instead"
+
+  - source_library: "java.net.Socket"
+    target_library: "socket"
+    target_imports: ["import socket"]
+    notes: "Direct mapping to socket module"
+
+  - source_library: "java.net.ServerSocket"
+    target_library: "socket"
+    target_imports: ["import socket"]
+    notes: "Direct mapping to socket module"
+
+  # Concurrency
+  - source_library: "java.util.concurrent"
+    target_library: "concurrent.futures"
+    target_imports: ["from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor"]
+    notes: "Use concurrent.futures for thread/process pools"
+
+  - source_library: "java.util.concurrent.ExecutorService"
+    target_library: "concurrent.futures.ThreadPoolExecutor"
+    target_imports: ["from concurrent.futures import ThreadPoolExecutor"]
+    notes: "Use ThreadPoolExecutor as context manager"
+
+  - source_library: "java.util.concurrent.Future"
+    target_library: "concurrent.futures.Future"
+    target_imports: ["from concurrent.futures import Future"]
+    notes: "Direct mapping to Future"
+
+  - source_library: "java.util.concurrent.CompletableFuture"
+    target_library: "asyncio"
+    target_imports: ["import asyncio"]
+    notes: "Use asyncio for async operations"
+
+  - source_library: "java.util.concurrent.atomic"
+    target_library: "threading"
+    target_imports: ["import threading"]
+    notes: "Use threading module with locks"
+
+  - source_library: "java.lang.Thread"
+    target_library: "threading.Thread"
+    target_imports: ["from threading import Thread"]
+    notes: "Direct mapping to threading.Thread"
+
+  - source_library: "java.util.concurrent.locks"
+    target_library: "threading"
+    target_imports: ["import threading"]
+    notes: "Use threading.Lock, RLock, Condition"
+
+  # JSON
+  - source_library: "com.google.gson"
+    target_library: "json"
+    target_imports: ["import json"]
+    notes: "Use built-in json module"
+
+  - source_library: "com.fasterxml.jackson"
+    target_library: "json"
+    target_imports: ["import json"]
+    notes: "Use built-in json module"
+
+  - source_library: "org.json"
+    target_library: "json"
+    target_imports: ["import json"]
+    notes: "Use built-in json module"
+
+  # Logging
+  - source_library: "java.util.logging"
+    target_library: "logging"
+    target_imports: ["import logging"]
+    notes: "Direct mapping to logging module"
+
+  - source_library: "org.slf4j"
+    target_library: "logging"
+    target_imports: ["import logging"]
+    notes: "Use logging module"
+
+  - source_library: "org.apache.log4j"
+    target_library: "logging"
+    target_imports: ["import logging"]
+    notes: "Use logging module"
+
+  - source_library: "ch.qos.logback"
+    target_library: "logging"
+    target_imports: ["import logging"]
+    notes: "Use logging module"
+
+  # =============================================================================
+  # Third-Party Java Libraries -> Python Libraries
+  # =============================================================================
+
+  # HTTP Clients
+  - source_library: "org.apache.http"
+    target_library: "requests"
+    pip_package: "requests"
+    target_imports: ["import requests"]
+    notes: "Use requests library for HTTP"
+
+  - source_library: "okhttp3"
+    target_library: "requests"
+    pip_package: "requests"
+    target_imports: ["import requests"]
+    notes: "Use requests library for HTTP"
+
+  - source_library: "com.squareup.okhttp3"
+    target_library: "requests"
+    pip_package: "requests"
+    target_imports: ["import requests"]
+    notes: "Use requests library for HTTP"
+
+  # Testing
+  - source_library: "org.junit"
+    target_library: "pytest"
+    pip_package: "pytest"
+    target_imports: ["import pytest"]
+    notes: "Use pytest for testing"
+
+  - source_library: "org.junit.jupiter"
+    target_library: "pytest"
+    pip_package: "pytest"
+    target_imports: ["import pytest"]
+    notes: "Use pytest for testing"
+
+  - source_library: "org.mockito"
+    target_library: "unittest.mock"
+    target_imports: ["from unittest.mock import Mock, patch, MagicMock"]
+    notes: "Use unittest.mock for mocking"
+
+  - source_library: "org.assertj"
+    target_library: "pytest"
+    pip_package: "pytest"
+    target_imports: ["import pytest"]
+    notes: "Use pytest assertions"
+
+  - source_library: "org.hamcrest"
+    target_library: "pytest"
+    pip_package: "pytest"
+    target_imports: ["import pytest"]
+    notes: "Use pytest assertions"
+
+  # Database
+  - source_library: "java.sql"
+    target_library: "sqlite3"
+    target_imports: ["import sqlite3"]
+    notes: "Use appropriate DB driver (sqlite3, psycopg2, etc.)"
+
+  - source_library: "javax.sql"
+    target_library: "sqlalchemy"
+    pip_package: "sqlalchemy"
+    target_imports: ["from sqlalchemy import create_engine"]
+    notes: "Use SQLAlchemy for database abstraction"
+
+  - source_library: "org.hibernate"
+    target_library: "sqlalchemy"
+    pip_package: "sqlalchemy"
+    target_imports: ["from sqlalchemy.orm import Session"]
+    notes: "Use SQLAlchemy ORM"
+
+  - source_library: "javax.persistence"
+    target_library: "sqlalchemy"
+    pip_package: "sqlalchemy"
+    target_imports: ["from sqlalchemy import Column, Integer, String"]
+    notes: "Use SQLAlchemy ORM"
+
+  # XML
+  - source_library: "javax.xml"
+    target_library: "xml.etree.ElementTree"
+    target_imports: ["import xml.etree.ElementTree as ET"]
+    notes: "Use ElementTree for XML"
+
+  - source_library: "org.w3c.dom"
+    target_library: "xml.dom.minidom"
+    target_imports: ["from xml.dom import minidom"]
+    notes: "Use minidom for DOM-style XML"
+
+  - source_library: "org.xml.sax"
+    target_library: "xml.sax"
+    target_imports: ["import xml.sax"]
+    notes: "Direct mapping to xml.sax"
+
+  # Spring Framework
+  - source_library: "org.springframework.web"
+    target_library: "flask"
+    pip_package: "flask"
+    target_imports: ["from flask import Flask, request, jsonify"]
+    notes: "Use Flask or FastAPI for web applications"
+
+  - source_library: "org.springframework.boot"
+    target_library: "flask"
+    pip_package: "flask"
+    target_imports: ["from flask import Flask"]
+    notes: "Use Flask or FastAPI for web applications"
+
+  - source_library: "org.springframework.beans"
+    target_library: ""
+    target_imports: []
+    notes: "Use Python's dynamic typing - no DI framework needed"
+
+  - source_library: "org.springframework.data"
+    target_library: "sqlalchemy"
+    pip_package: "sqlalchemy"
+    target_imports: ["from sqlalchemy.orm import Session"]
+    notes: "Use SQLAlchemy for data access"
+
+  # Apache Commons
+  - source_library: "org.apache.commons.lang3"
+    target_library: ""
+    target_imports: []
+    notes: "Use Python built-ins and standard library"
+
+  - source_library: "org.apache.commons.io"
+    target_library: "pathlib"
+    target_imports: ["from pathlib import Path"]
+    notes: "Use pathlib and shutil"
+
+  - source_library: "org.apache.commons.collections"
+    target_library: "collections"
+    target_imports: ["import collections"]
+    notes: "Use collections module"
+
+  - source_library: "org.apache.commons.codec"
+    target_library: "base64"
+    target_imports: ["import base64", "import hashlib"]
+    notes: "Use base64 and hashlib modules"
+
+  # Lombok
+  - source_library: "lombok"
+    target_library: "dataclasses"
+    target_imports: ["from dataclasses import dataclass, field"]
+    notes: "Use dataclasses or attrs"
+
+  # Guava
+  - source_library: "com.google.common"
+    target_library: ""
+    target_imports: []
+    notes: "Use Python built-ins and standard library"
+
+  - source_library: "com.google.common.collect"
+    target_library: "collections"
+    target_imports: ["import collections"]
+    notes: "Use collections module"
+
+  - source_library: "com.google.common.base"
+    target_library: ""
+    target_imports: []
+    notes: "Use Python built-ins"
+
+  - source_library: "com.google.common.io"
+    target_library: "pathlib"
+    target_imports: ["from pathlib import Path"]
+    notes: "Use pathlib and io modules"

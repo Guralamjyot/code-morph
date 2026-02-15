@@ -1,0 +1,633 @@
+# Feature Mapping Rules: Java → Python
+# These rules guide the LLM on how to translate Java-specific constructs to Python
+
+rules:
+  - id: JAVA_STREAM_API
+    name: "Stream API to List Comprehension"
+    source_language: java
+    target_language: python
+    description: "Convert Java Stream API to Python list comprehensions"
+    premise: ".stream()"
+    instruction: |
+      Convert Java Stream operations to Python list comprehensions or generator expressions.
+      Example: numbers.stream().map(x -> x * 2).collect(Collectors.toList()) becomes:
+      [x * 2 for x in numbers]
+      Example with filter: list.stream().filter(x -> x > 0).collect(Collectors.toList()) becomes:
+      [x for x in list if x > 0]
+    validation: "["
+    priority: 5
+    examples:
+      - source: "items.stream().collect(Collectors.toList())"
+        target: "[x for x in items]"
+      - source: "numbers.stream().filter(x -> x > 0).map(x -> x * 2).collect(Collectors.toList())"
+        target: "[x * 2 for x in numbers if x > 0]"
+
+  - id: JAVA_COLLECTORS_TOMAP
+    name: "Collectors.toMap to Dict Comprehension"
+    source_language: java
+    target_language: python
+    description: "Convert Java Collectors.toMap to Python dict comprehensions"
+    premise: "toMap("
+    instruction: |
+      Convert Collectors.toMap() operations to Python dictionary comprehensions.
+      Example: items.stream().collect(Collectors.toMap(Item::getId, Item::getName)) becomes:
+      {item.id: item.name for item in items}
+    validation: "{"
+    priority: 5
+
+  - id: JAVA_TRY_RESOURCES
+    name: "Try-with-resources to Context Manager"
+    source_language: java
+    target_language: python
+    description: "Convert try-with-resources to Python with statement"
+    premise: "try ("
+    instruction: |
+      Convert Java try-with-resources to Python 'with' statement.
+      Example: try (BufferedReader br = new BufferedReader(new FileReader(file))) { ... }
+      becomes: with open(file) as f: ...
+    validation: "with "
+    priority: 8
+    examples:
+      - source: "try (BufferedReader br = new BufferedReader(new FileReader(path))) { return br.readLine(); }"
+        target: "with open(path) as f:\n    return f.readline()"
+
+  - id: JAVA_STRING_FORMAT
+    name: "String.format to F-String"
+    source_language: java
+    target_language: python
+    description: "Convert String.format to Python f-strings"
+    premise: "String.format("
+    instruction: |
+      Convert String.format() to Python f-strings.
+      Example: String.format("Hello %s, you are %d", name, age) becomes:
+      f"Hello {name}, you are {age}"
+      Map format specifiers: %s -> {}, %d -> {}, %.2f -> {:.2f}
+    validation: 'f"'
+    priority: 3
+    examples:
+      - source: 'String.format("Hello %s", name)'
+        target: 'f"Hello {name}"'
+
+  - id: JAVA_NULL
+    name: "null to None"
+    source_language: java
+    target_language: python
+    description: "Convert Java null to Python None"
+    premise: "null"
+    instruction: "Replace all occurrences of 'null' with 'None'"
+    validation: "None"
+    priority: 1
+
+  - id: JAVA_BOOL
+    name: "Boolean true/false"
+    source_language: java
+    target_language: python
+    description: "Convert Java true/false to Python True/False"
+    premise: "true"
+    instruction: "Replace 'true' with 'True' and 'false' with 'False' (capitalized)"
+    validation: null
+    priority: 1
+
+  - id: JAVA_LENGTH_SIZE
+    name: ".length/.size() to len()"
+    source_language: java
+    target_language: python
+    description: "Convert .length, .size(), .length() to len()"
+    premise: ".length"
+    instruction: |
+      Replace Java length/size patterns with Python len():
+      - array.length -> len(array)
+      - collection.size() -> len(collection)
+      - string.length() -> len(string)
+    validation: "len("
+    priority: 2
+
+  - id: JAVA_SYSOUT
+    name: "System.out.println to print()"
+    source_language: java
+    target_language: python
+    description: "Convert System.out.println to print()"
+    premise: "System.out.println"
+    instruction: "Replace System.out.println(...) with print(...)"
+    validation: "print("
+    priority: 2
+
+  - id: JAVA_FOR_LOOP
+    name: "Traditional for loop to range()"
+    source_language: java
+    target_language: python
+    description: "Convert Java for loops to Python for/range"
+    premise: "for (int"
+    instruction: |
+      Convert Java traditional for loops to Python range():
+      - for (int i = 0; i < n; i++) -> for i in range(n):
+      - for (int i = start; i < end; i++) -> for i in range(start, end):
+      - for (int i = 0; i < n; i += step) -> for i in range(0, n, step):
+    validation: "range("
+    priority: 4
+    examples:
+      - source: "for (int i = 0; i < 10; i++)"
+        target: "for i in range(10):"
+      - source: "for (int i = 5; i < 20; i += 2)"
+        target: "for i in range(5, 20, 2):"
+
+  - id: JAVA_FOREACH
+    name: "Enhanced for loop to for-in"
+    source_language: java
+    target_language: python
+    description: "Convert Java enhanced for loop to Python for-in"
+    premise: "for ("
+    instruction: |
+      Convert Java enhanced for loops to Python for-in:
+      - for (Type item : collection) -> for item in collection:
+    validation: "for "
+    priority: 4
+    examples:
+      - source: "for (String name : names)"
+        target: "for name in names:"
+
+  - id: JAVA_LAMBDA
+    name: "Lambda expressions"
+    source_language: java
+    target_language: python
+    description: "Convert Java lambdas to Python lambdas"
+    premise: "->"
+    instruction: |
+      Convert Java lambda expressions to Python lambda or list comprehensions.
+      Example: (x) -> x + 1 becomes lambda x: x + 1
+      Example: (x, y) -> x + y becomes lambda x, y: x + y
+      For multi-line lambdas, convert to a regular Python function.
+      Prefer list comprehensions over map/filter with lambdas where appropriate.
+    validation: null
+    priority: 6
+    examples:
+      - source: "(x) -> x * 2"
+        target: "lambda x: x * 2"
+      - source: "(a, b) -> a + b"
+        target: "lambda a, b: a + b"
+
+  - id: JAVA_THIS
+    name: "this keyword to self"
+    source_language: java
+    target_language: python
+    description: "Convert this to self, add self parameter"
+    premise: "this."
+    instruction: |
+      In class methods:
+      - Replace 'this.attribute' with 'self.attribute'
+      - Add 'self' as the first parameter to all instance methods
+      - Remove 'this' when used alone (Python uses self)
+    priority: 7
+
+  - id: JAVA_INSTANCEOF
+    name: "instanceof to isinstance()"
+    source_language: java
+    target_language: python
+    description: "Convert instanceof to isinstance"
+    premise: "instanceof"
+    instruction: "Replace (obj instanceof Type) with isinstance(obj, Type)"
+    validation: "isinstance("
+    priority: 3
+    examples:
+      - source: "if (obj instanceof String)"
+        target: "if isinstance(obj, str):"
+
+  - id: JAVA_TRY_CATCH
+    name: "Exception handling"
+    source_language: java
+    target_language: python
+    description: "Convert try/catch to try/except"
+    premise: "catch ("
+    instruction: |
+      Convert Java exception handling to Python:
+      - 'catch' becomes 'except'
+      - Map Java exceptions to Python equivalents:
+        * NullPointerException -> AttributeError or TypeError
+        * IllegalArgumentException -> ValueError
+        * ClassCastException -> TypeError
+        * FileNotFoundException -> FileNotFoundError
+        * IOException -> IOError
+        * NoSuchElementException -> KeyError
+        * IndexOutOfBoundsException -> IndexError
+        * ArithmeticException -> ZeroDivisionError
+        * Exception -> Exception
+      - 'finally' remains the same
+    validation: "except"
+    priority: 6
+    examples:
+      - source: "catch (IllegalArgumentException e)"
+        target: "except ValueError as e:"
+
+  - id: JAVA_THROW
+    name: "throw statement"
+    source_language: java
+    target_language: python
+    description: "Convert throw to raise"
+    premise: "throw new"
+    instruction: "Replace 'throw new ExceptionType(message)' with 'raise ExceptionType(message)'"
+    validation: "raise "
+    priority: 4
+    examples:
+      - source: "throw new IllegalArgumentException(\"Invalid input\")"
+        target: "raise ValueError(\"Invalid input\")"
+
+  - id: JAVA_LIST_METHODS
+    name: "ArrayList/List methods"
+    source_language: java
+    target_language: python
+    description: "Convert Java List methods to Python list methods"
+    premise: ".add("
+    instruction: |
+      Convert Java List methods to Python:
+      - list.add(x) -> list.append(x)
+      - list.addAll(other) -> list.extend(other)
+      - list.remove(list.size() - 1) -> list.pop()
+      - list.get(i) -> list[i]
+      - list.set(i, val) -> list[i] = val
+      - list.clear() -> list.clear()
+      - list.contains(x) -> x in list
+      - list.isEmpty() -> not list or len(list) == 0
+    priority: 3
+
+  - id: JAVA_MAP_METHODS
+    name: "Map/HashMap methods"
+    source_language: java
+    target_language: python
+    description: "Convert Java Map methods to Python dict methods"
+    premise: ".get("
+    instruction: |
+      Convert Java Map operations to Python dict:
+      - map.get(key) -> dict[key] or dict.get(key)
+      - map.put(key, value) -> dict[key] = value
+      - map.containsKey(key) -> key in dict
+      - map.getOrDefault(key, default) -> dict.get(key, default)
+      - map.keySet() -> dict.keys()
+      - map.values() -> dict.values()
+      - map.entrySet() -> dict.items()
+      - map.remove(key) -> del dict[key] or dict.pop(key)
+    priority: 4
+
+  - id: JAVA_STRING_METHODS
+    name: "String methods"
+    source_language: java
+    target_language: python
+    description: "Convert Java String methods to Python string methods"
+    premise: ".toLowerCase("
+    instruction: |
+      Convert Java String methods to Python:
+      - str.toLowerCase() -> str.lower()
+      - str.toUpperCase() -> str.upper()
+      - str.trim() -> str.strip()
+      - str.split(regex) -> str.split() or re.split(regex, str)
+      - str.replace(old, new) -> str.replace(old, new)
+      - str.startsWith(prefix) -> str.startswith(prefix)
+      - str.endsWith(suffix) -> str.endswith(suffix)
+      - str.substring(start, end) -> str[start:end]
+      - str.charAt(i) -> str[i]
+      - str.indexOf(s) -> str.find(s)
+      - str.equals(other) -> str == other
+      - str.equalsIgnoreCase(other) -> str.lower() == other.lower()
+    priority: 2
+
+  - id: JAVA_OPTIONAL
+    name: "Optional handling"
+    source_language: java
+    target_language: python
+    description: "Convert Java Optional to Python idioms"
+    premise: "Optional"
+    instruction: |
+      Convert Java Optional to Python:
+      - Optional.of(value) -> value (Python doesn't need Optional)
+      - Optional.empty() -> None
+      - optional.isPresent() -> value is not None
+      - optional.get() -> value
+      - optional.orElse(default) -> value if value is not None else default
+      - optional.orElseGet(supplier) -> value if value is not None else supplier()
+      - optional.map(func) -> func(value) if value is not None else None
+      In Python, simply use None checks or default values.
+    priority: 5
+
+  - id: JAVA_ANNOTATIONS
+    name: "Annotations"
+    source_language: java
+    target_language: python
+    description: "Handle Java annotations"
+    premise: "@Override"
+    instruction: |
+      Convert Java annotations to Python equivalents:
+      - @Override -> no equivalent needed (duck typing)
+      - @Deprecated -> @deprecated decorator or warnings.warn()
+      - @SuppressWarnings -> # noqa comment or ignore
+      - @FunctionalInterface -> no equivalent needed
+      - @Nullable/@NonNull -> use Optional type hints
+      - Custom annotations -> convert to decorators where appropriate
+    priority: 9
+
+  - id: JAVA_GETTERS_SETTERS
+    name: "Getters and Setters"
+    source_language: java
+    target_language: python
+    description: "Convert Java getters/setters to Python properties"
+    premise: "public "
+    instruction: |
+      Convert Java getter/setter patterns to Python:
+      - Simple getters (getName()): Use direct attribute access (obj.name)
+      - Simple setters (setName(val)): Use direct attribute assignment (obj.name = val)
+      - Complex getters/setters: Use @property decorator
+      Example:
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+      Becomes:
+        # Direct access: self.name
+        # Or with property:
+        @property
+        def name(self):
+            return self._name
+        @name.setter
+        def name(self, value):
+            self._name = value
+    priority: 7
+
+  - id: JAVA_INTERFACE
+    name: "Interface to ABC"
+    source_language: java
+    target_language: python
+    description: "Convert Java interfaces to Python Abstract Base Classes"
+    premise: "interface "
+    instruction: |
+      Convert Java interfaces to Python Abstract Base Classes (ABC):
+      - interface MyInterface -> class MyInterface(ABC):
+      - Add @abstractmethod decorator to each method
+      - Import from abc module: from abc import ABC, abstractmethod
+      Example:
+        public interface Drawable { void draw(); }
+      Becomes:
+        from abc import ABC, abstractmethod
+        class Drawable(ABC):
+            @abstractmethod
+            def draw(self):
+                pass
+    validation: "ABC"
+    priority: 8
+
+  - id: JAVA_STATIC
+    name: "Static methods/fields"
+    source_language: java
+    target_language: python
+    description: "Convert Java static to Python @staticmethod or @classmethod"
+    premise: "static "
+    instruction: |
+      Convert Java static members to Python:
+      - static method without class state -> @staticmethod
+      - static method with class state -> @classmethod (use cls parameter)
+      - static field -> class variable defined at class level
+      Example:
+        public static int count = 0;
+        public static void increment() { count++; }
+      Becomes:
+        class MyClass:
+            count = 0
+            @classmethod
+            def increment(cls):
+                cls.count += 1
+    priority: 6
+
+  - id: JAVA_FINAL
+    name: "final keyword"
+    source_language: java
+    target_language: python
+    description: "Handle Java final keyword"
+    premise: "final "
+    instruction: |
+      Convert Java final keyword:
+      - final variable -> Use UPPER_CASE naming convention for constants
+      - final parameter -> No direct equivalent, document immutability
+      - final class -> No direct equivalent, or use __slots__ / metaclass
+      - final method -> No direct equivalent, document intent
+      Python relies on convention rather than enforcement.
+    priority: 3
+
+  - id: JAVA_PRIVATE_PROTECTED
+    name: "Access modifiers"
+    source_language: java
+    target_language: python
+    description: "Convert Java access modifiers to Python conventions"
+    premise: "private "
+    instruction: |
+      Convert Java access modifiers to Python naming conventions:
+      - private -> prefix with underscore (_variable, _method)
+      - protected -> prefix with underscore (_variable, _method)
+      - public -> no prefix
+      - package-private (default) -> no prefix
+      Python uses naming conventions, not enforced access control.
+    priority: 3
+
+  - id: JAVA_GENERIC_TYPES
+    name: "Generic types to type hints"
+    source_language: java
+    target_language: python
+    description: "Convert Java generics to Python type hints"
+    premise: "<"
+    instruction: |
+      Convert Java generic types to Python type hints:
+      - List<String> -> List[str] or list[str] (Python 3.9+)
+      - Map<String, Integer> -> Dict[str, int] or dict[str, int]
+      - Set<T> -> Set[T] or set[T]
+      - Optional<T> -> Optional[T]
+      - T extends Comparable -> T (with bounds in TypeVar if needed)
+      Import from typing module: from typing import List, Dict, Set, Optional
+    priority: 5
+
+  - id: JAVA_CONSTRUCTOR
+    name: "Constructor to __init__"
+    source_language: java
+    target_language: python
+    description: "Convert Java constructors to Python __init__"
+    premise: "public "
+    instruction: |
+      Convert Java constructors to Python __init__:
+      - Constructor name matches class -> def __init__(self, ...):
+      - Multiple constructors -> use default arguments or @classmethod factory methods
+      - super() call -> super().__init__(...)
+      Example:
+        public Person(String name, int age) {
+            this.name = name;
+            this.age = age;
+        }
+      Becomes:
+        def __init__(self, name: str, age: int):
+            self.name = name
+            self.age = age
+    priority: 8
+
+  - id: JAVA_SWITCH
+    name: "Switch statement"
+    source_language: java
+    target_language: python
+    description: "Convert Java switch to Python match or if-elif"
+    premise: "switch ("
+    instruction: |
+      Convert Java switch statements to Python:
+      - For Python 3.10+: Use match-case statement
+      - For earlier versions: Use if-elif-else chain or dictionary dispatch
+      Example (Python 3.10+):
+        switch (day) { case MONDAY: ...; break; case TUESDAY: ...; }
+      Becomes:
+        match day:
+            case Day.MONDAY: ...
+            case Day.TUESDAY: ...
+      Or (pre-3.10):
+        if day == Day.MONDAY: ...
+        elif day == Day.TUESDAY: ...
+    priority: 5
+
+  - id: JAVA_ENUM
+    name: "Enum class"
+    source_language: java
+    target_language: python
+    description: "Convert Java enum to Python Enum"
+    premise: "enum "
+    instruction: |
+      Convert Java enums to Python Enum:
+      - import from enum module: from enum import Enum
+      - enum Day { MONDAY, TUESDAY } -> class Day(Enum): MONDAY = auto(); TUESDAY = auto()
+      - Enums with values: Use explicit values
+      - Enum methods: Define methods in the class
+      Example:
+        public enum Status { ACTIVE(1), INACTIVE(0); int code; }
+      Becomes:
+        from enum import Enum
+        class Status(Enum):
+            ACTIVE = 1
+            INACTIVE = 0
+    validation: "Enum"
+    priority: 6
+
+  - id: JAVA_SYNCHRONIZED
+    name: "synchronized keyword"
+    source_language: java
+    target_language: python
+    description: "Convert Java synchronized to Python threading locks"
+    premise: "synchronized"
+    instruction: |
+      Convert Java synchronized to Python threading primitives:
+      - synchronized method -> use threading.Lock() or @synchronized decorator
+      - synchronized block -> use 'with lock:' context manager
+      Example:
+        synchronized void increment() { count++; }
+      Becomes:
+        import threading
+        lock = threading.Lock()
+        def increment(self):
+            with self.lock:
+                self.count += 1
+    priority: 7
+
+  - id: JAVA_ARRAYLIST_INIT
+    name: "ArrayList/Collection initialization"
+    source_language: java
+    target_language: python
+    description: "Convert Java collection initialization to Python"
+    premise: "new ArrayList"
+    instruction: |
+      Convert Java collection initialization to Python:
+      - new ArrayList<>() -> []
+      - new HashMap<>() -> {}
+      - new HashSet<>() -> set()
+      - Arrays.asList(1, 2, 3) -> [1, 2, 3]
+      - List.of(1, 2, 3) -> [1, 2, 3]
+      - Map.of("a", 1) -> {"a": 1}
+    priority: 2
+
+  - id: JAVA_BUILDER_PATTERN
+    name: "Builder pattern"
+    source_language: java
+    target_language: python
+    description: "Convert Java Builder pattern to Python idioms"
+    premise: ".builder()"
+    instruction: |
+      Convert Java Builder pattern to Python:
+      - Simple cases: Use keyword arguments in constructor
+      - Complex cases: Use dataclasses with defaults or attrs library
+      Example:
+        Person.builder().name("John").age(30).build()
+      Becomes:
+        Person(name="John", age=30)
+      Or with dataclass:
+        @dataclass
+        class Person:
+            name: str
+            age: int = 0
+    priority: 6
+
+  - id: JAVA_TERNARY
+    name: "Ternary operator"
+    source_language: java
+    target_language: python
+    description: "Convert Java ternary to Python conditional expression"
+    premise: "? "
+    instruction: |
+      Convert Java ternary operator to Python conditional expression:
+      - condition ? valueIfTrue : valueIfFalse
+      Becomes:
+      - valueIfTrue if condition else valueIfFalse
+      Example:
+        int max = a > b ? a : b;
+      Becomes:
+        max = a if a > b else b
+    priority: 3
+    examples:
+      - source: "result = x > 0 ? \"positive\" : \"non-positive\""
+        target: "result = \"positive\" if x > 0 else \"non-positive\""
+
+  - id: JAVA_SERIALIZABLE
+    name: "Serializable interface"
+    source_language: java
+    target_language: python
+    description: "Remove Serializable (not needed in Python)"
+    premise: "Serializable"
+    instruction: |
+      Remove 'implements Serializable' and serialVersionUID field.
+      Python objects are picklable by default; no explicit interface needed.
+    validation: null
+    priority: 3
+
+  - id: JAVA_COMPARABLE
+    name: "Comparable to comparison methods"
+    source_language: java
+    target_language: python
+    description: "Convert Java Comparable to Python comparison magic methods"
+    premise: "Comparable"
+    instruction: |
+      Convert Java Comparable<T> to Python comparison magic methods.
+      - implements Comparable<T> -> implement __lt__, __le__, __gt__, __ge__, __eq__
+      - compareTo(other) method -> use @functools.total_ordering with __lt__ and __eq__
+    validation: null
+    priority: 5
+
+  - id: JAVA_ITERABLE
+    name: "Iterable to __iter__"
+    source_language: java
+    target_language: python
+    description: "Convert Java Iterable to Python __iter__"
+    premise: "Iterable"
+    instruction: |
+      Convert Java Iterable<T> to Python __iter__ method.
+      - implements Iterable<T> -> implement __iter__(self) returning iterator
+      - Iterator pattern -> use yield or iter()
+    validation: null
+    priority: 5
+
+  - id: JAVA_EQUALS_HASHCODE
+    name: "equals/hashCode to __eq__/__hash__"
+    source_language: java
+    target_language: python
+    description: "Convert Java equals/hashCode to Python __eq__/__hash__"
+    premise: "equals("
+    instruction: |
+      Convert Java equals()/hashCode() to Python __eq__()/__hash__().
+      - public boolean equals(Object obj) -> def __eq__(self, other)
+      - public int hashCode() -> def __hash__(self)
+      - Also add __repr__ if toString() is defined.
+    validation: null
+    priority: 6

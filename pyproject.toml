@@ -1,0 +1,96 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "codemorph"
+version = "1.0.0"
+description = "Bidirectional code translation and version upgrades for Python and Java"
+requires-python = ">=3.10"
+dependencies = [
+    # CLI
+    "typer>=0.9.0",
+    "rich>=13.0.0",
+
+    # Configuration & Data Models
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "pyyaml>=6.0",
+
+    # AST Parsing
+    "tree-sitter>=0.20.0",
+    "tree-sitter-python>=0.20.0",
+    "tree-sitter-java>=0.20.0",
+
+    # Graph Analysis
+    "networkx>=3.0",
+
+    # LLM Integration (Ollama + OpenRouter)
+    "ollama>=0.1.0",
+    "openai>=1.0.0",
+
+    # Serialization & Utilities
+    "orjson>=3.9.0",
+
+    # Testing utilities
+    "pytest>=7.0.0",
+]
+
+[project.optional-dependencies]
+# Development dependencies
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+]
+
+# Native cross-language bridges (advanced, requires Java runtime)
+# Default uses subprocess+JSON bridge which doesn't need these
+bridge = [
+    "jpype1>=1.4.0",
+    "py4j>=0.10.0",
+]
+
+# RAG (Retrieval Augmented Generation) for style-consistent translation
+# Optional - disabled by default
+rag = [
+    "chromadb>=0.4.0",
+    "sentence-transformers>=2.0.0",
+]
+
+# All optional features
+all = [
+    "jpype1>=1.4.0",
+    "py4j>=0.10.0",
+    "chromadb>=0.4.0",
+    "sentence-transformers>=2.0.0",
+]
+
+[project.scripts]
+codemorph = "codemorph.cli.main:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.black]
+line-length = 100
+target-version = ['py310', 'py311', 'py312']
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short"
