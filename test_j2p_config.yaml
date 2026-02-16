@@ -1,0 +1,21 @@
+project:
+  name: test_j2p
+  source:
+    language: java
+    version: "17"
+    root: ./examples/test_j2p
+  target:
+    language: python
+    version: "3.10"
+    output_dir: ./output/test_j2p
+
+llm:
+  provider: openrouter
+  model: "openrouter/aurora-alpha"
+  temperature: 0.2
+
+translation:
+  max_retries_type_check: 3
+  allow_mocking: true
+
+checkpoint_mode: auto

@@ -14,7 +14,7 @@ pip install -e .
 # Phase 1 only — no LLM required
 python demo_phase1.py
 
-# Phase 1 + 2 — requires an LLM (see "LLM Setup" below)
+# Phase 1 + 2 — uses OpenRouter (default)
 python demo_phase2.py --config my_config.yaml
 ```
 
@@ -23,7 +23,22 @@ You can point them at any source directory in either direction.
 
 ---
 
-## CLI Flags
+## CLI Usage
+
+The main entry point is `codemorph translate`:
+
+```bash
+# Java → Python (small example)
+codemorph translate ./examples/test_j2p --config test_j2p_config.yaml -v
+
+# Python → Java (small example)
+codemorph translate ./examples/test_p2j --config test_p2j_config.yaml -v
+
+# Tictactoe (larger, 79 fragments)
+codemorph translate ./examples/tictactoe/src --config tictactoe_config.yaml -v
+```
+
+### CLI Flags
 
 | Flag | Default | Description |
 |------|---------|-------------|
@@ -34,12 +49,12 @@ You can point them at any source directory in either direction.
 | `--output-dir` | `./demo_output/<project>` | Where to write output and state |
 | `--config` | none | YAML config file — overrides all other flags |
 
-### Examples
+### Demo Script Examples
 
 ```bash
 # Default: tictactoe Java → Python
 python demo_phase1.py
-python demo_phase2.py --config openrouter_tictactoe.yaml
+python demo_phase2.py --config tictactoe_config.yaml
 
 # Python → Java (calculator example)
 python demo_phase1.py \
@@ -93,23 +108,17 @@ Runs Phase 1 first, then for each fragment in dependency order:
 
 ## LLM Setup
 
-Phase 2 needs an LLM. Three providers are supported: **OpenRouter** (recommended
-for open-source models), **OpenAI**, and **Ollama** (local).
+Phase 2 needs an LLM. Three providers are supported: **OpenRouter** (default,
+recommended), **OpenAI**, and **Ollama** (local).
 
-### Option A: OpenRouter (recommended)
+### Option A: OpenRouter (default)
 
-OpenRouter gives you access to open-source models (DeepSeek, Qwen, Llama, etc.)
-via a single API key. Models run on their infrastructure — no GPU needed locally.
+OpenRouter gives you access to a wide range of models via a single API key.
+The default model is **`openrouter/aurora-alpha`**.
 
 1. **Get an API key** at [openrouter.ai/keys](https://openrouter.ai/keys)
 
-2. **Set the environment variable** (so you don't put keys in config files):
-
-   ```bash
-   export OPENROUTER_API_KEY="sk-or-v1-your-key-here"
-   ```
-
-3. **Create a config file** (e.g. `my_config.yaml`):
+2. **Create a config file** (e.g. `my_config.yaml`):
 
    ```yaml
    project:
@@ -126,8 +135,8 @@ via a single API key. Models run on their infrastructure — no GPU needed local
 
    llm:
      provider: openrouter
-     # api_key is read from OPENAI_API_KEY env var (see step 2)
-     model: deepseek/deepseek-coder-v2
+     api_key: "sk-or-v1-your-key-here"
+     model: "openrouter/aurora-alpha"
      temperature: 0.2
 
    translation:
@@ -137,31 +146,39 @@ via a single API key. Models run on their infrastructure — no GPU needed local
    checkpoint_mode: auto
    ```
 
-   You can also put the key directly in the YAML (`api_key: "sk-or-v1-..."`),
-   but the env var approach keeps secrets out of config files.
-
-4. **Run it:**
+   Alternatively, you can omit `api_key` from the YAML and set the
+   environment variable instead:
 
    ```bash
+   export OPENAI_API_KEY="sk-or-v1-your-key-here"
+   ```
+
+3. **Run it:**
+
+   ```bash
+   # Using the CLI
+   codemorph translate ./examples/tictactoe/src --config my_config.yaml -v
+
+   # Or using the demo script
    python demo_phase2.py --config my_config.yaml
    ```
 
-#### Recommended Open-Source Models on OpenRouter
+#### Other Models on OpenRouter
 
-| Model ID | Context | Good For | Cost |
-|----------|---------|----------|------|
-| `deepseek/deepseek-coder-v2` | 128k | Best overall code translation | ~$0.14/M tokens |
-| `deepseek/deepseek-v3-0324` | 128k | Complex logic, large classes | ~$0.50/M tokens |
-| `qwen/qwen-2.5-coder-32b-instruct` | 32k | Fast, good at Java/Python | ~$0.20/M tokens |
-| `meta-llama/llama-3.1-70b-instruct` | 128k | General purpose, reliable | ~$0.40/M tokens |
-| `mistralai/codestral-latest` | 32k | Code-specific, fast | ~$0.30/M tokens |
+The default `openrouter/aurora-alpha` works well for code translation. If you
+want to try alternatives:
 
-For the tictactoe example (~79 fragments), `deepseek/deepseek-coder-v2` or
-`qwen/qwen-2.5-coder-32b-instruct` work well and are inexpensive.
+| Model ID | Context | Notes |
+|----------|---------|-------|
+| `openrouter/aurora-alpha` | 128k | **Default** — good all-around performance |
+| `deepseek/deepseek-coder-v2` | 128k | Strong code translation |
+| `deepseek/deepseek-v3-0324` | 128k | Complex logic, large classes |
+| `qwen/qwen-2.5-coder-32b-instruct` | 32k | Fast, good at Java/Python |
+| `meta-llama/llama-3.1-70b-instruct` | 128k | General purpose, reliable |
 
 ### Option B: OpenAI
 
-Same as OpenRouter but uses OpenAI's API directly.
+Same config structure but uses OpenAI's API directly.
 
 ```yaml
 llm:
@@ -191,13 +208,7 @@ Run models locally. Requires a machine with a GPU (or patience with CPU inferenc
    ollama serve
    ```
 
-4. **Run the demo** (no config file needed — Ollama is the default):
-
-   ```bash
-   python demo_phase2.py
-   ```
-
-   Or with a specific model:
+4. **Config:**
 
    ```yaml
    llm:
@@ -218,7 +229,7 @@ project:
   name: my_project                     # Project name (used in logs)
   source:
     language: java                     # java | python
-    version: "17"                      # Java: 11, 17, 21  Python: 2.7, 3.6–3.12
+    version: "17"                      # Java: 11, 17, 21  Python: 2.7, 3.6-3.12
     root: ./src                        # Path to source files
     test_root: ./tests                 # Path to test files (optional)
   target:
@@ -229,10 +240,10 @@ project:
     package_name: com.example.app      # Java package name (required when target is Java)
 
 llm:
-  provider: openrouter                 # ollama | openrouter | openai
+  provider: openrouter                 # openrouter | openai | ollama
   api_key: "sk-or-v1-..."             # Required for openrouter/openai (or set OPENAI_API_KEY)
   host: http://localhost:11434         # Ollama server URL (only used with ollama provider)
-  model: deepseek/deepseek-coder-v2   # Model identifier
+  model: "openrouter/aurora-alpha"     # Model identifier
   temperature: 0.2                     # 0.0 = deterministic, higher = more creative
   context_window: 16384                # Max tokens in context
   timeout: 300                         # Request timeout in seconds
@@ -258,24 +269,29 @@ checkpoint_mode: auto
 
 ## Included Examples
 
-| Example | Source | Files | Fragments | Path |
-|---------|--------|-------|-----------|------|
-| **tictactoe** (default) | Java 17 | 11 | 79 | `examples/tictactoe/src/` |
-| calculator | Python 3.10 | 2 | 74 | `examples/python_project/` |
+| Example | Direction | Source | Files | Fragments | Config |
+|---------|-----------|--------|-------|-----------|--------|
+| **test_j2p** | Java → Python | `examples/test_j2p/` | 1 | 2 | `test_j2p_config.yaml` |
+| **test_p2j** | Python → Java | `examples/test_p2j/` | 1 | 1 | `test_p2j_config.yaml` |
+| **tictactoe** | Java → Python | `examples/tictactoe/src/` | 11 | 79 | `tictactoe_config.yaml` |
+| **calculator** | Python → Java | `examples/python_project/` | 2 | ~74 | `openrouter_config.yaml` |
+| **javatuples** | Java → Python | `examples/javatuples/src/` | — | — | `javatuples_config.yaml` |
+
+All configs are pre-configured with `openrouter/aurora-alpha`. Just add your API key if not already set.
 
 ---
 
 ## Troubleshooting
 
-**"Failed to connect to Ollama at http://localhost:11434"**
-Ollama isn't running. Either start it (`ollama serve`) or use `--config` with
-an OpenRouter/OpenAI config.
-
 **"API key required"**
 Set `api_key` in the YAML config or export `OPENAI_API_KEY` in your shell.
 
+**"Failed to connect to Ollama at http://localhost:11434"**
+Ollama isn't running. Either start it (`ollama serve`) or use `--config` with
+an OpenRouter config (recommended).
+
 **"Invalid Python/Java version"**
-Supported versions — Python: `2.7`, `3.6`–`3.12`. Java: `11`, `17`, `21`.
+Supported versions — Python: `2.7`, `3.6`-`3.12`. Java: `11`, `17`, `21`.
 
 **"Java target requires build_system"**
 When translating to Java, the config must include `build_system: gradle` (or `maven`)

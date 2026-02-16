@@ -11,8 +11,8 @@ project:
     output_dir: ./output/thealgorithms_poc
 
 llm:
-  provider: openai
-  model: gpt-4o-mini
+  provider: openrouter
+  model: "openrouter/aurora-alpha"
   temperature: 0.2
 
 translation:

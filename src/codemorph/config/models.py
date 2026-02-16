@@ -97,10 +97,10 @@ class LLMProvider(str, Enum):
 class LLMConfig(BaseModel):
     """Configuration for the LLM client."""
 
-    provider: LLMProvider = Field(default=LLMProvider.OLLAMA, description="LLM provider")
+    provider: LLMProvider = Field(default=LLMProvider.OPENROUTER, description="LLM provider")
     host: str = Field(default="http://localhost:11434", description="Ollama server URL (for Ollama)")
     api_key: str | None = Field(default=None, description="API key (for OpenRouter/OpenAI)")
-    model: str = Field(default="deepseek-coder:6.7b", description="Model to use for translation")
+    model: str = Field(default="openrouter/aurora-alpha", description="Model to use for translation")
     temperature: float = Field(default=0.2, ge=0.0, le=2.0, description="Sampling temperature")
     context_window: int = Field(default=16384, description="Maximum context window size")
     timeout: int = Field(default=300, description="Request timeout in seconds")

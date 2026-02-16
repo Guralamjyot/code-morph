@@ -62,6 +62,69 @@ def validate_path(path: str, must_exist: bool = True) -> Path:
     return p
 
 
+def write_translated_files(
+    translated_fragments: dict,
+    analysis_fragments: dict,
+    output_dir: Path,
+    target_lang: str,
+) -> list[Path]:
+    """Write translated code to proper .py/.java files in the output directory.
+
+    Groups fragments by source file, writes class-level fragments as the base,
+    and skips method-level fragments (they're part of the class).
+    Returns list of written file paths.
+    """
+    from collections import defaultdict
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    ext = ".py" if target_lang == "python" else ".java"
+
+    # Group fragments by source file
+    by_source: dict[str, list[tuple[str, dict, dict]]] = defaultdict(list)
+    for fid, tfrag in translated_fragments.items():
+        afrag = tfrag.get("fragment") or analysis_fragments.get(fid, {})
+        source_file = afrag.get("source_file", "unknown")
+        by_source[source_file].append((fid, tfrag, afrag))
+
+    written = []
+    for source_file, frags in by_source.items():
+        # Derive output filename from source file
+        stem = Path(source_file).stem
+        # Convert to snake_case for Python output
+        if target_lang == "python":
+            import re
+            stem = re.sub(r'(?<=[a-z0-9])(?=[A-Z])', '_', stem).lower()
+
+        out_path = output_dir / f"{stem}{ext}"
+
+        # Prefer class-level fragments (they contain the full class code);
+        # fall back to all fragments joined
+        class_frags = [
+            (fid, tf, af) for fid, tf, af in frags
+            if af.get("fragment_type") == "class" or "::" in fid and "." not in fid.split("::", 1)[1]
+        ]
+
+        if class_frags:
+            # Use the class-level fragment (has complete code)
+            code = class_frags[0][1].get("target_code", "")
+        else:
+            # No class fragment — join all fragments (standalone functions, etc.)
+            parts = []
+            for fid, tf, af in frags:
+                tc = tf.get("target_code", "")
+                if tc.strip():
+                    parts.append(tc)
+            code = "\n\n".join(parts)
+
+        if not code.strip():
+            continue
+
+        out_path.write_text(code + "\n", encoding="utf-8")
+        written.append(out_path)
+
+    return written
+
+
 # =============================================================================
 # Commands
 # =============================================================================
@@ -300,9 +363,45 @@ def translate(
                 color = "yellow"
             console.print(f"  [{color}]{status.value}:[/{color}] {count}")
 
+        # Write translated code to proper files
+        console.print("\n[bold cyan]Writing Output Files[/bold cyan]")
+        output_path = Path(cfg.project.target.output_dir)
+        # Build serializable dict for write_translated_files
+        tfrag_dicts = {}
+        for fid, tf in translated_fragments.items():
+            tfrag_dicts[fid] = {
+                "target_code": tf.target_code if hasattr(tf, "target_code") else tf.get("target_code", ""),
+                "status": tf.status.value if hasattr(tf, "status") else tf.get("status", ""),
+                "fragment": {
+                    "source_file": str(tf.fragment.source_file) if hasattr(tf, "fragment") and hasattr(tf.fragment, "source_file") else "",
+                    "fragment_type": tf.fragment.fragment_type.value if hasattr(tf, "fragment") and hasattr(tf.fragment, "fragment_type") else "",
+                    "name": tf.fragment.name if hasattr(tf, "fragment") and hasattr(tf.fragment, "name") else "",
+                },
+            }
+        analysis_frags = {}
+        if state.analysis_result and state.analysis_result.fragments:
+            for fid, af in state.analysis_result.fragments.items():
+                analysis_frags[fid] = {
+                    "source_file": str(af.source_file) if hasattr(af, "source_file") else "",
+                    "fragment_type": af.fragment_type.value if hasattr(af, "fragment_type") else "",
+                    "name": af.name if hasattr(af, "name") else "",
+                }
+        written_files = write_translated_files(
+            tfrag_dicts,
+            analysis_frags,
+            output_path,
+            cfg.project.target.language.value,
+        )
+        if written_files:
+            console.print(f"[green]✓[/green] Wrote {len(written_files)} file(s) to [bold]{output_path}[/bold]:")
+            for f in written_files:
+                console.print(f"    {f}")
+        else:
+            console.print("[yellow]⚠ No output files written (no translated code)[/yellow]")
+
         console.print(f"\n[green]✓[/green] Translation complete!")
         console.print(f"  State saved to: {state.state_dir}")
-        console.print(f"  Output directory: {cfg.project.target.output_dir}")
+        console.print(f"  Output directory: {output_path}")
         console.print(f"  Symbol registry: {len(symbol_registry)} symbols mapped")
         if test_results:
             test_success = sum(1 for r in test_results if r.compilation_success)

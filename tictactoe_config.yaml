@@ -10,8 +10,8 @@ project:
     version: "3.11"
     output_dir: ./output/tictactoe
 llm:
-  provider: openai
-  model: gpt-4o-mini
+  provider: openrouter
+  model: "openrouter/aurora-alpha"
   temperature: 0.2
 translation:
   max_retries_type_check: 5

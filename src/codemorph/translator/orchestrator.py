@@ -101,10 +101,10 @@ class Phase2Orchestrator:
                 continue
             base = fid[: fid.index("$")]
             overload_groups.setdefault(base, []).append(fid)
+        bases_to_remove = [base for base, variants in overload_groups.items() if len(variants) < 2]
+        for base in bases_to_remove:
+            overload_groups.pop(base)
         for base, variants in overload_groups.items():
-            if len(variants) < 2:
-                overload_groups.pop(base)
-                continue
             primary = variants[0]
             for secondary in variants[1:]:
                 merged_overloads[secondary] = primary
