@@ -526,14 +526,15 @@ class JavaPlugin(LanguagePlugin):
         try:
             output_dir.mkdir(parents=True, exist_ok=True)
 
-            # Extract class name from code
+            # Extract class name from code (class, interface, or enum)
             class_name_match = re.search(r"(?:public\s+)?class\s+(\w+)", code)
             if not class_name_match:
-                # Try interface
                 class_name_match = re.search(r"(?:public\s+)?interface\s+(\w+)", code)
+            if not class_name_match:
+                class_name_match = re.search(r"(?:public\s+)?enum\s+(\w+)", code)
 
             if not class_name_match:
-                return (False, ["Could not find class or interface declaration in code"])
+                return (False, ["Could not find class, interface, or enum declaration in code"])
 
             class_name = class_name_match.group(1)
 

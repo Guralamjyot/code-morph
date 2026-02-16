@@ -11,9 +11,10 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+import logging
 import ollama
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import OpenAI, RateLimitError
 
 from codemorph.config.models import CodeFragment, LLMConfig, LLMProvider
 
@@ -135,6 +136,31 @@ JAVA-TO-PYTHON RULES:
 11. Java constructors → `def __init__(self, ...):` with `super().__init__(...)` for subclasses.
 12. Java `toString()` → `__str__()`, `equals()` → `__eq__()`, `hashCode()` → `__hash__()`, `compareTo()` → `__lt__()/__eq__()` or implement `@functools.total_ordering`.
 13. For consistent snake_case conversion: camelCase digits stay attached — `getValue0()` → `get_value0()`, NOT `get_value_0()`.
+"""
+        # Add Python→Java-specific rules
+        elif source_lang.lower() == "python" and target_lang.lower() == "java":
+            prompt += """
+PYTHON-TO-JAVA RULES:
+9. Python `__init__` → Java constructor with the class name. Remove `self` parameter.
+10. Python `__str__` → Java `toString()`, `__eq__` → `equals(Object)`, `__hash__` → `hashCode()`, `__lt__` → `compareTo()` or `Comparable<T>` interface.
+11. Python `self.field` → Java instance fields declared at class level. Infer types from usage.
+12. Python `Enum` class → Java `enum` with proper value field, constructor, and getter.
+13. Python `list[T]` → Java `List<T>` (use `ArrayList<>` for instantiation). Import `java.util.*`.
+14. Python `dict[K,V]` → Java `Map<K,V>` (use `HashMap<>` for instantiation).
+15. Python `Optional[T]` → Java nullable `T` (use `@Nullable` or null checks).
+16. Python `raise ValueError(msg)` → Java `throw new IllegalArgumentException(msg)`.
+17. Python `isinstance(x, T)` → Java `x instanceof T`.
+18. Python snake_case methods → Java camelCase. e.g., `get_total_value` → `getTotalValue`.
+19. Every Java class/enum MUST be wrapped in a `public class ClassName { ... }` with proper access modifiers.
+20. Python `for x in collection` → Java enhanced for-loop or Stream API.
+21. Python `None` → Java `null`, `True`/`False` → `true`/`false`.
+22. When translating a complete Python class, produce a COMPLETE Java class with ALL methods, fields, constructors, and imports. Do NOT omit any methods.
+23. CRITICAL: Output ONLY the class/enum being translated. Do NOT include stub, placeholder, or helper definitions for other classes. Assume referenced classes exist in separate files. Use imports instead.
+24. For standalone functions (like `main`), wrap in a `public class Main { public static void main(String[] args) { ... } }`.
+25. Python `Enum` with string values: use Java `enum` with a `private final String value` field, a constructor, and a `getValue()` method. Include the `isPerishable()` type methods if present.
+26. CRITICAL: Python uses direct attribute access (self.name, self.price, etc.). When translating a class to Java, generate public getter methods for ALL private instance fields. For example: `self.name` → `private String name;` + `public String getName() { return name; }`. This is essential because other classes will need to access these fields via getters.
+27. For mutable fields (like quantity), also generate a setter method.
+28. Do NOT use Java reflection (java.lang.reflect) to access fields. Always use proper getter/setter methods.
 """
         return prompt
 
@@ -488,6 +514,31 @@ JAVA-TO-PYTHON RULES:
 12. Java `toString()` → `__str__()`, `equals()` → `__eq__()`, `hashCode()` → `__hash__()`, `compareTo()` → `__lt__()/__eq__()` or implement `@functools.total_ordering`.
 13. For consistent snake_case conversion: camelCase digits stay attached — `getValue0()` → `get_value0()`, NOT `get_value_0()`.
 """
+        # Add Python→Java-specific rules
+        elif source_lang.lower() == "python" and target_lang.lower() == "java":
+            prompt += """
+PYTHON-TO-JAVA RULES:
+9. Python `__init__` → Java constructor with the class name. Remove `self` parameter.
+10. Python `__str__` → Java `toString()`, `__eq__` → `equals(Object)`, `__hash__` → `hashCode()`, `__lt__` → `compareTo()` or `Comparable<T>` interface.
+11. Python `self.field` → Java instance fields declared at class level. Infer types from usage.
+12. Python `Enum` class → Java `enum` with proper value field, constructor, and getter.
+13. Python `list[T]` → Java `List<T>` (use `ArrayList<>` for instantiation). Import `java.util.*`.
+14. Python `dict[K,V]` → Java `Map<K,V>` (use `HashMap<>` for instantiation).
+15. Python `Optional[T]` → Java nullable `T` (use `@Nullable` or null checks).
+16. Python `raise ValueError(msg)` → Java `throw new IllegalArgumentException(msg)`.
+17. Python `isinstance(x, T)` → Java `x instanceof T`.
+18. Python snake_case methods → Java camelCase. e.g., `get_total_value` → `getTotalValue`.
+19. Every Java class/enum MUST be wrapped in a `public class ClassName { ... }` with proper access modifiers.
+20. Python `for x in collection` → Java enhanced for-loop or Stream API.
+21. Python `None` → Java `null`, `True`/`False` → `true`/`false`.
+22. When translating a complete Python class, produce a COMPLETE Java class with ALL methods, fields, constructors, and imports. Do NOT omit any methods.
+23. CRITICAL: Output ONLY the class/enum being translated. Do NOT include stub, placeholder, or helper definitions for other classes. Assume referenced classes exist in separate files. Use imports instead.
+24. For standalone functions (like `main`), wrap in a `public class Main { public static void main(String[] args) { ... } }`.
+25. Python `Enum` with string values: use Java `enum` with a `private final String value` field, a constructor, and a `getValue()` method. Include the `isPerishable()` type methods if present.
+26. CRITICAL: Python uses direct attribute access (self.name, self.price, etc.). When translating a class to Java, generate public getter methods for ALL private instance fields. For example: `self.name` → `private String name;` + `public String getName() { return name; }`. This is essential because other classes will need to access these fields via getters.
+27. For mutable fields (like quantity), also generate a setter method.
+28. Do NOT use Java reflection (java.lang.reflect) to access fields. Always use proper getter/setter methods.
+"""
         return prompt
 
     def translate_fragment(
@@ -682,20 +733,38 @@ Return ONLY the corrected code.
         return self._call_llm(messages)
 
     def _call_llm(self, messages: list[dict[str, str]]) -> str:
-        """Call the OpenAI-compatible API."""
-        try:
-            response = self.client.chat.completions.create(
-                model=self.config.model,
-                messages=messages,
-                temperature=self.config.temperature,
-            )
+        """Call the OpenAI-compatible API with retry-backoff for rate limits."""
+        logger = logging.getLogger("codemorph.translator.llm_client")
+        max_retries = 5
+        base_delay = 2.0
 
-            content = response.choices[0].message.content
-            # Strip markdown code blocks that LLMs often add despite instructions
-            return strip_markdown_code_blocks(content)
+        for attempt in range(max_retries + 1):
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.config.model,
+                    messages=messages,
+                    temperature=self.config.temperature,
+                )
 
-        except Exception as e:
-            raise RuntimeError(f"LLM API call failed: {e}")
+                if not response.choices:
+                    raise RuntimeError("LLM API returned empty choices")
+                content = response.choices[0].message.content
+                if content is None:
+                    raise RuntimeError("LLM API returned None content")
+                # Strip markdown code blocks that LLMs often add despite instructions
+                return strip_markdown_code_blocks(content)
+
+            except RateLimitError as e:
+                if attempt < max_retries:
+                    delay = base_delay * (2 ** attempt)  # 2, 4, 8, 16, 32 seconds
+                    logger.info(f"Rate limited (429), retrying in {delay:.0f}s (attempt {attempt + 1}/{max_retries})")
+                    time.sleep(delay)
+                    continue
+                raise RuntimeError(f"LLM API call failed after {max_retries} rate-limit retries: {e}")
+            except RuntimeError:
+                raise
+            except Exception as e:
+                raise RuntimeError(f"LLM API call failed: {e}")
 
     def _format_errors(self, errors: list[str]) -> str:
         """Format errors for display in prompt."""

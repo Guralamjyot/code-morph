@@ -62,6 +62,13 @@ def validate_path(path: str, must_exist: bool = True) -> Path:
     return p
 
 
+def _extract_java_class_name(code: str) -> str | None:
+    """Extract the public class/enum name from Java code."""
+    import re
+    match = re.search(r'(?:public\s+)?(?:class|enum|interface)\s+(\w+)', code)
+    return match.group(1) if match else None
+
+
 def write_translated_files(
     translated_fragments: dict,
     analysis_fragments: dict,
@@ -70,11 +77,12 @@ def write_translated_files(
 ) -> list[Path]:
     """Write translated code to proper .py/.java files in the output directory.
 
-    Groups fragments by source file, writes class-level fragments as the base,
-    and skips method-level fragments (they're part of the class).
+    For Java: writes each class/enum to its own .java file (Java requires this).
+    For Python: groups by source file.
     Returns list of written file paths.
     """
     from collections import defaultdict
+    import re
 
     output_dir.mkdir(parents=True, exist_ok=True)
     ext = ".py" if target_lang == "python" else ".java"
@@ -88,39 +96,65 @@ def write_translated_files(
 
     written = []
     for source_file, frags in by_source.items():
-        # Derive output filename from source file
-        stem = Path(source_file).stem
-        # Convert to snake_case for Python output
-        if target_lang == "python":
-            import re
-            stem = re.sub(r'(?<=[a-z0-9])(?=[A-Z])', '_', stem).lower()
-
-        out_path = output_dir / f"{stem}{ext}"
-
-        # Prefer class-level fragments (they contain the full class code);
-        # fall back to all fragments joined
+        # Collect class-level fragments and standalone (non-method) fragments.
         class_frags = [
             (fid, tf, af) for fid, tf, af in frags
             if af.get("fragment_type") == "class" or "::" in fid and "." not in fid.split("::", 1)[1]
         ]
+        standalone_frags = [
+            (fid, tf, af) for fid, tf, af in frags
+            if af.get("fragment_type") in ("function", "global_var", "constant")
+            and (fid, tf, af) not in class_frags
+        ]
 
-        if class_frags:
-            # Use the class-level fragment (has complete code)
-            code = class_frags[0][1].get("target_code", "")
+        if target_lang == "java":
+            # Java: each class/enum gets its own file
+            for fid, tf, af in class_frags:
+                tc = tf.get("target_code", "")
+                if not tc.strip():
+                    continue
+                # Extract class name from the translated code
+                class_name = _extract_java_class_name(tc)
+                if not class_name:
+                    # Fallback: use fragment name
+                    class_name = af.get("name", fid.split("::")[-1])
+                out_path = output_dir / f"{class_name}.java"
+                out_path.write_text(tc + "\n", encoding="utf-8")
+                written.append(out_path)
+
+            # Standalone functions go into Main.java (or similar)
+            for fid, tf, af in standalone_frags:
+                tc = tf.get("target_code", "")
+                if not tc.strip():
+                    continue
+                class_name = _extract_java_class_name(tc)
+                if not class_name:
+                    class_name = "Main"
+                out_path = output_dir / f"{class_name}.java"
+                out_path.write_text(tc + "\n", encoding="utf-8")
+                written.append(out_path)
         else:
-            # No class fragment — join all fragments (standalone functions, etc.)
+            # Python: group by source file
+            stem = Path(source_file).stem
+            stem = re.sub(r'(?<=[a-z0-9])(?=[A-Z])', '_', stem).lower()
+            out_path = output_dir / f"{stem}{ext}"
+
             parts = []
-            for fid, tf, af in frags:
+            for fid, tf, af in class_frags:
+                tc = tf.get("target_code", "")
+                if tc.strip():
+                    parts.append(tc)
+            for fid, tf, af in standalone_frags:
                 tc = tf.get("target_code", "")
                 if tc.strip():
                     parts.append(tc)
             code = "\n\n".join(parts)
 
-        if not code.strip():
-            continue
+            if not code.strip():
+                continue
 
-        out_path.write_text(code + "\n", encoding="utf-8")
-        written.append(out_path)
+            out_path.write_text(code + "\n", encoding="utf-8")
+            written.append(out_path)
 
     return written
 
@@ -160,6 +194,9 @@ def translate(
     import os
     log_level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(level=log_level, format="%(name)s: %(message)s")
+    # Silence noisy HTTP libraries even in verbose mode
+    for noisy in ("httpcore", "httpx", "openai._base_client", "urllib3"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
 
     # Ensure JAVA_HOME is set if not already
     if not os.environ.get("JAVA_HOME"):

@@ -317,8 +317,8 @@ Respond with ONLY the JSON, no other text."""
 
             mapping = LibraryMapping(
                 source_library=source_library,
-                target_library=data.get("target_library", ""),
-                target_imports=data.get("imports", []),
+                target_library=data.get("target_library") or "",
+                target_imports=data.get("imports") or [],
                 maven_dependency=data.get("maven_dependency"),
                 notes=data.get("notes"),
                 verified_by_user=False,
@@ -329,7 +329,7 @@ Respond with ONLY the JSON, no other text."""
             self.pending_mappings[source_library] = mapping
             return mapping
 
-        except (json.JSONDecodeError, KeyError, AttributeError) as e:
+        except (json.JSONDecodeError, KeyError, AttributeError, ValueError) as e:
             # If LLM response is malformed, create a placeholder
             mapping = LibraryMapping(
                 source_library=source_library,

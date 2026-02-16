@@ -9,7 +9,9 @@ This orchestrator coordinates the type-driven translation phase, which includes:
 5. Retrying on failures with LLM refinement
 """
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 from rich.console import Console
@@ -116,7 +118,52 @@ class Phase2Orchestrator:
                 f"merging at translation time[/cyan]\n"
             )
 
-        # Process each fragment in dependency order
+        # Build set of class-level fragment IDs to skip redundant method translations.
+        # When translating Python→Java, class-level fragments already contain all methods;
+        # translating individual methods separately is redundant and causes compilation
+        # failures (Java requires a class wrapper).
+        class_fragment_ids = {
+            fid for fid in translation_order
+            if fid in fragments and fragments[fid].fragment_type.value == "class"
+        }
+        # Map: "file::ClassName" → True for classes that have class-level fragments
+        class_parents = set()
+        for fid in class_fragment_ids:
+            # Extract "file::ClassName" from fragment ID
+            class_parents.add(fid)
+
+        # Separate fragments into: secondary overloads (instant) vs needs-translation
+        to_translate: list[tuple[int, str, CodeFragment]] = []
+        skipped_methods = 0
+        for idx, fragment_id in enumerate(translation_order):
+            fragment = fragments[fragment_id]
+            if fragment_id in merged_overloads:
+                # Defer secondary overloads — handle after primaries are done
+                continue
+            # Skip method-level fragments when parent class fragment exists
+            if (fragment.fragment_type.value == "method"
+                    and fragment.parent_class
+                    and f"{fragment.source_file.stem}::{fragment.parent_class}" in class_parents):
+                skipped_methods += 1
+                continue
+            to_translate.append((idx, fragment_id, fragment))
+
+        if skipped_methods:
+            console.print(
+                f"[cyan]Skipping {skipped_methods} method fragments "
+                f"(included in class-level translations)[/cyan]\n"
+            )
+            self.stats["total"] -= skipped_methods
+
+        # Lock for console/progress output (Rich is not thread-safe)
+        print_lock = Lock()
+
+        # Translate fragments: serial for Java (compile-time deps), parallel for others
+        if self.config.project.target.language.value == "java":
+            max_workers = 1  # Java requires sequential compilation for cross-class refs
+        else:
+            max_workers = min(4, len(to_translate)) if to_translate else 1
+
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
@@ -128,53 +175,69 @@ class Phase2Orchestrator:
                 "Translating fragments...", total=len(translation_order)
             )
 
+            def _do_translate(item):
+                idx, fid, frag = item
+                return (fid, frag, self._translate_fragment(frag, idx, len(translation_order)))
+
+            results: dict[str, TranslatedFragment] = {}
+
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {
+                    executor.submit(_do_translate, item): item
+                    for item in to_translate
+                }
+                for future in as_completed(futures):
+                    fid, frag, translated = future.result()
+                    results[fid] = translated
+
+                    # Save to state
+                    self.state.update_fragment(translated)
+                    self.state.current_fragment_index += 1
+
+                    # Update stats
+                    if translated.status == TranslationStatus.COMPILED:
+                        self.stats["compiled"] += 1
+                    elif translated.status == TranslationStatus.TYPE_VERIFIED:
+                        self.stats["type_verified"] += 1
+                    elif translated.status == TranslationStatus.FAILED:
+                        self.stats["failed"] += 1
+                    elif translated.status == TranslationStatus.MOCKED:
+                        self.stats["mocked"] += 1
+                    elif translated.status == TranslationStatus.HUMAN_REVIEW:
+                        self.stats["human_reviewed"] += 1
+
+                    progress.advance(task)
+
+            # Now handle secondary overloads (copy from primary results)
             for idx, fragment_id in enumerate(translation_order):
+                if fragment_id not in merged_overloads:
+                    continue
                 fragment = fragments[fragment_id]
-
-                # If this is a secondary overload, copy the primary's result
-                if fragment_id in merged_overloads:
-                    primary_fid = merged_overloads[fragment_id]
-                    if primary_fid in self.state.translated_fragments:
-                        primary_tf = self.state.translated_fragments[primary_fid]
-                        translated = TranslatedFragment(
-                            fragment=fragment,
-                            status=primary_tf.status,
-                            target_code=primary_tf.target_code,
-                            is_mocked=primary_tf.is_mocked,
-                            mock_reason=primary_tf.mock_reason,
-                        )
-                        console.print(
-                            f"[dim]Skipping secondary overload:[/dim] {fragment.name} "
-                            f"(merged with {primary_fid})"
-                        )
-                        self._register_symbol(fragment, translated)
-                        self.state.update_fragment(translated)
-                        self.state.current_fragment_index += 1
-                        if translated.status == TranslationStatus.COMPILED:
-                            self.stats["compiled"] += 1
-                        elif translated.status == TranslationStatus.TYPE_VERIFIED:
-                            self.stats["type_verified"] += 1
-                        progress.advance(task)
-                        continue
-
-                # Translate the fragment (primary overload or normal)
-                translated = self._translate_fragment(fragment, idx, len(translation_order))
-
-                # Save to state
-                self.state.update_fragment(translated)
-                self.state.current_fragment_index += 1
-
-                # Update stats
-                if translated.status == TranslationStatus.COMPILED:
-                    self.stats["compiled"] += 1
-                elif translated.status == TranslationStatus.TYPE_VERIFIED:
-                    self.stats["type_verified"] += 1
-                elif translated.status == TranslationStatus.FAILED:
-                    self.stats["failed"] += 1
-                elif translated.status == TranslationStatus.MOCKED:
-                    self.stats["mocked"] += 1
-                elif translated.status == TranslationStatus.HUMAN_REVIEW:
-                    self.stats["human_reviewed"] += 1
+                primary_fid = merged_overloads[fragment_id]
+                primary_tf = results.get(primary_fid) or self.state.translated_fragments.get(primary_fid)
+                if primary_tf:
+                    translated = TranslatedFragment(
+                        fragment=fragment,
+                        status=primary_tf.status,
+                        target_code=primary_tf.target_code,
+                        is_mocked=primary_tf.is_mocked,
+                        mock_reason=primary_tf.mock_reason,
+                    )
+                    console.print(
+                        f"[dim]Skipping secondary overload:[/dim] {fragment.name} "
+                        f"(merged with {primary_fid})"
+                    )
+                    self._register_symbol(fragment, translated)
+                    self.state.update_fragment(translated)
+                    self.state.current_fragment_index += 1
+                    if translated.status == TranslationStatus.COMPILED:
+                        self.stats["compiled"] += 1
+                    elif translated.status == TranslationStatus.TYPE_VERIFIED:
+                        self.stats["type_verified"] += 1
+                else:
+                    console.print(
+                        f"[yellow]⚠[/yellow] Primary overload {primary_fid} not found for {fragment_id}"
+                    )
 
                 progress.advance(task)
 
@@ -349,7 +412,6 @@ class Phase2Orchestrator:
                     f"Exceeded retry limit for compilation"
                     f" (last errors: {translated.compilation_errors[:3]})"
                 )
-                translated.error_message = "; ".join(translated.compilation_errors[:3])
                 translated.target_code = self._generate_mock(fragment)
                 console.print(f"  [yellow]⚠[/yellow] Mocked (exceeded retries)")
             else:
@@ -607,7 +669,8 @@ class Phase2Orchestrator:
         """
         Get signatures of already-translated dependencies.
 
-        Uses symbol registry for efficient lookup of translated signatures.
+        For Java targets, extracts public method signatures from the translated
+        Java code so dependent fragments can use the correct API.
 
         Args:
             fragment: Fragment whose dependencies to retrieve
@@ -615,37 +678,71 @@ class Phase2Orchestrator:
         Returns:
             List of dependency signatures
         """
+        import re
         context = []
+        is_java_target = self.config.project.target.language.value == "java"
 
         for dep_id in fragment.dependencies:
-            # First check symbol registry (preferred)
+            # Check if we have the translated code for this dependency
+            if dep_id in self.state.translated_fragments:
+                translated_dep = self.state.translated_fragments[dep_id]
+                if translated_dep.target_code and translated_dep.status in (
+                    TranslationStatus.COMPILED, TranslationStatus.TYPE_VERIFIED
+                ):
+                    if is_java_target:
+                        # Extract Java public method signatures for context
+                        java_sigs = self._extract_java_signatures(translated_dep.target_code)
+                        if java_sigs:
+                            context.append({
+                                "name": translated_dep.fragment.name,
+                                "signature": "\n".join(java_sigs),
+                                "type": translated_dep.fragment.fragment_type.value,
+                            })
+                            continue
+
+            # Fallback: symbol registry or source signature
             registry_sig = self.symbol_registry.get_signature(dep_id)
             registry_mapping = self.symbol_registry.get_mapping(dep_id)
 
             if registry_sig and registry_mapping:
-                context.append(
-                    {
-                        "name": registry_mapping.target_name,
-                        "signature": registry_sig,
-                        "type": registry_mapping.symbol_type,
-                    }
-                )
+                context.append({
+                    "name": registry_mapping.target_name,
+                    "signature": registry_sig,
+                    "type": registry_mapping.symbol_type,
+                })
             elif dep_id in self.state.translated_fragments:
-                # Fallback to translated fragments
                 translated_dep = self.state.translated_fragments[dep_id]
                 if translated_dep.target_code:
                     signature = self.target_plugin.extract_signature(
                         translated_dep.fragment
                     )
-                    context.append(
-                        {
-                            "name": translated_dep.fragment.name,
-                            "signature": signature or "// Signature not available",
-                            "type": translated_dep.fragment.fragment_type.value,
-                        }
-                    )
+                    context.append({
+                        "name": translated_dep.fragment.name,
+                        "signature": signature or "// Signature not available",
+                        "type": translated_dep.fragment.fragment_type.value,
+                    })
 
         return context
+
+    def _extract_java_signatures(self, java_code: str) -> list[str]:
+        """Extract public method/constructor/field signatures from Java code."""
+        import re
+        sigs = []
+        for line in java_code.split("\n"):
+            stripped = line.strip()
+            # Match public method/constructor declarations
+            if re.match(r'public\s+\S+.*\(.*\)', stripped):
+                # Get just the signature (before the body)
+                sig = stripped.rstrip('{').strip()
+                if sig:
+                    sigs.append(sig)
+            # Match enum constants
+            elif re.match(r'[A-Z_]+\(', stripped):
+                sigs.append(stripped.rstrip(',').rstrip(';'))
+            # Match class/enum declaration
+            elif re.match(r'(public\s+)?(class|enum|interface)\s+\w+', stripped):
+                sigs.append(stripped.rstrip('{').strip())
+        return sigs
 
     def _validate_feature_mapping(
         self, fragment: CodeFragment, target_code: str
@@ -680,6 +777,9 @@ class Phase2Orchestrator:
         """
         Attempt to compile the translated fragment.
 
+        For Java targets, includes previously-translated fragments as dependencies
+        so cross-class references can resolve.
+
         Args:
             fragment: Original fragment
             target_code: Translated code
@@ -694,8 +794,44 @@ class Phase2Orchestrator:
             )
             output_dir.mkdir(parents=True, exist_ok=True)
 
+            dependencies = None
+            # For Java targets: write already-translated class fragments to a shared
+            # dependency directory so javac can resolve cross-class references.
+            if self.config.project.target.language.value == "java":
+                import re
+                deps_dir = self.config.project.state_dir / "compile_temp" / "_shared_deps"
+                deps_dir.mkdir(parents=True, exist_ok=True)
+
+                # Write previously-compiled fragments to shared dir
+                for fid, tf in self.state.translated_fragments.items():
+                    if fid == fragment.id:
+                        continue
+                    if tf.status not in (TranslationStatus.COMPILED, TranslationStatus.TYPE_VERIFIED):
+                        continue
+                    if not tf.target_code:
+                        continue
+                    # Extract class name and write to shared dir
+                    match = re.search(r'(?:public\s+)?(?:class|enum|interface)\s+(\w+)', tf.target_code)
+                    if match:
+                        dep_file = deps_dir / f"{match.group(1)}.java"
+                        dep_file.write_text(tf.target_code, encoding="utf-8")
+
+                # Also write the current fragment itself to shared dir after compilation
+                dependencies = [deps_dir]
+
             # Try to compile
-            success, errors = self.target_plugin.compile_fragment(target_code, output_dir)
+            success, errors = self.target_plugin.compile_fragment(
+                target_code, output_dir, dependencies=dependencies
+            )
+
+            # On success, save to shared deps for future fragments
+            if success and self.config.project.target.language.value == "java":
+                import re
+                deps_dir = self.config.project.state_dir / "compile_temp" / "_shared_deps"
+                match = re.search(r'(?:public\s+)?(?:class|enum|interface)\s+(\w+)', target_code)
+                if match:
+                    dep_file = deps_dir / f"{match.group(1)}.java"
+                    dep_file.write_text(target_code, encoding="utf-8")
 
             return success, errors
 

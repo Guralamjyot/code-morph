@@ -199,13 +199,13 @@ def get_default_python_to_java_rules() -> list[FeatureMappingRule]:
             name="List Comprehension",
             source_language=LanguageType.PYTHON,
             target_language=LanguageType.JAVA,
-            description="Convert Python list comprehensions to Java Streams",
-            premise="[",  # Very basic check - could be improved
+            description="Convert Python list comprehensions to Java Streams or loops",
+            premise=" for ",  # Comprehensions always contain ' for '
             instruction=(
-                "Convert list comprehensions to Java Stream API. "
+                "Convert list comprehensions to Java Stream API or traditional loops. "
                 "Example: [x for x in items] becomes items.stream().collect(Collectors.toList())"
             ),
-            validation="stream(",
+            validation=None,  # Can translate to stream, loop, or other patterns
             priority=5,
         ),
         FeatureMappingRule(
@@ -213,13 +213,13 @@ def get_default_python_to_java_rules() -> list[FeatureMappingRule]:
             name="Dictionary Comprehension",
             source_language=LanguageType.PYTHON,
             target_language=LanguageType.JAVA,
-            description="Convert Python dict comprehensions to Java Streams",
-            premise="{",
+            description="Convert Python dict comprehensions to Java Streams or loops",
+            premise=" for ",  # Comprehensions always contain ' for '
             instruction=(
-                "Convert dictionary comprehensions to Java Stream API with Collectors.toMap(). "
+                "Convert dictionary comprehensions to Java Stream API with Collectors.toMap() or loops. "
                 "Example: {k: v for k, v in items} becomes items.stream().collect(Collectors.toMap(...))"
             ),
-            validation="toMap(",
+            validation=None,  # Can translate to stream, loop, HashMap, etc.
             priority=5,
         ),
         FeatureMappingRule(
@@ -233,7 +233,7 @@ def get_default_python_to_java_rules() -> list[FeatureMappingRule]:
                 "Convert 'with' statements to Java try-with-resources. "
                 "Example: with open(file) as f: becomes try (FileReader f = new FileReader(file)) { ... }"
             ),
-            validation="try (",
+            validation=None,  # Not all 'with' translates to try-with-resources
             priority=8,
         ),
         FeatureMappingRule(
@@ -258,7 +258,7 @@ def get_default_python_to_java_rules() -> list[FeatureMappingRule]:
             description="Convert Python None to Java null",
             premise="None",
             instruction="Replace 'None' with 'null'",
-            validation="null",
+            validation=None,  # 'None' in docstrings/comments doesn't require 'null' in output
             priority=1,
         ),
         FeatureMappingRule(

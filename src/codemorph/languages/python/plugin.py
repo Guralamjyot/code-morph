@@ -65,15 +65,11 @@ class PythonPlugin(LanguagePlugin):
         with open(file_path, "r", encoding="utf-8") as f:
             source_lines = f.readlines()
 
-        for node in ast.walk(tree):
+        for node in tree.body:
             fragment = None
 
-            if isinstance(node, ast.FunctionDef):
-                # Standalone function
-                fragment = self._extract_function(node, file_path, source_lines, parent_class=None)
-
-            elif isinstance(node, ast.AsyncFunctionDef):
-                # Async function
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                # Standalone function (top-level only)
                 fragment = self._extract_function(node, file_path, source_lines, parent_class=None)
 
             elif isinstance(node, ast.ClassDef):
@@ -89,9 +85,8 @@ class PythonPlugin(LanguagePlugin):
                         fragments.append(method_fragment)
 
             elif isinstance(node, ast.Assign) and hasattr(node, "lineno"):
-                # Global variable assignment
-                if self._is_top_level(node, tree):
-                    fragment = self._extract_global_var(node, file_path, source_lines)
+                # Global variable assignment (already top-level since we iterate tree.body)
+                fragment = self._extract_global_var(node, file_path, source_lines)
 
             if fragment:
                 fragments.append(fragment)

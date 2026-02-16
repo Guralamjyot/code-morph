@@ -7,12 +7,12 @@ rules:
     source_language: python
     target_language: java
     description: "Convert Python list comprehensions to Java Stream API"
-    premise: "["
+    premise: " for "
     instruction: |
-      Convert list comprehensions to Java Stream API.
+      Convert list comprehensions to Java Stream API or traditional loops.
       Example: [x * 2 for x in numbers] becomes:
       numbers.stream().map(x -> x * 2).collect(Collectors.toList())
-    validation: "stream("
+      Or use a traditional for loop with ArrayList.add().
     priority: 5
     examples:
       - source: "[x for x in items]"
@@ -25,11 +25,10 @@ rules:
     source_language: python
     target_language: java
     description: "Convert Python dict comprehensions to Java Streams"
-    premise: "{"
+    premise: " for "
     instruction: |
-      Convert dictionary comprehensions to Java Stream API with Collectors.toMap().
-      Use appropriate key/value mappers.
-    validation: "toMap("
+      Convert dictionary comprehensions to Java Stream API with Collectors.toMap()
+      or traditional loops with Map.put().
     priority: 5
 
   - id: PY_CONTEXT_MGR
@@ -110,7 +109,6 @@ rules:
       Convert range(n) to:
       - Traditional for loop: for (int i = 0; i < n; i++)
       - Or IntStream: IntStream.range(0, n)
-    validation: "for ("
     priority: 4
 
   - id: PY_LAMBDA
@@ -120,10 +118,9 @@ rules:
     description: "Convert Python lambdas to Java lambdas"
     premise: "lambda "
     instruction: |
-      Convert Python lambda to Java lambda expression.
+      Convert Python lambda to Java lambda expression or Comparator.
       Example: lambda x: x + 1 becomes (x) -> x + 1
       Example: lambda x, y: x + y becomes (x, y) -> x + y
-    validation: "->"
     priority: 6
 
   - id: PY_SELF
@@ -175,7 +172,6 @@ rules:
     description: "Convert raise to throw"
     premise: "raise "
     instruction: "Replace 'raise ExceptionType(message)' with 'throw new ExceptionType(message)'"
-    validation: "throw new"
     priority: 4
 
   - id: PY_LIST_METHODS
@@ -214,7 +210,7 @@ rules:
     source_language: python
     target_language: java
     description: "Convert dict access to Map.get()"
-    premise: "["
+    premise: "dict["
     instruction: |
       Convert dictionary operations to Java Map:
       - dict[key] -> map.get(key)
@@ -245,7 +241,7 @@ rules:
     source_language: python
     target_language: java
     description: "Handle Python decorators"
-    premise: "@"
+    premise: "@property"
     instruction: |
       Python decorators have no direct Java equivalent.
       Options:

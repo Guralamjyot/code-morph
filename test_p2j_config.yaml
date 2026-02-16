@@ -17,7 +17,7 @@ llm:
   temperature: 0.2
 
 translation:
-  max_retries_type_check: 3
-  allow_mocking: true
+  max_retries_type_check: 5
+  allow_mocking: false
 
 checkpoint_mode: auto
