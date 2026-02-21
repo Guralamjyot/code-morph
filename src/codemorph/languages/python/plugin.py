@@ -76,13 +76,15 @@ class PythonPlugin(LanguagePlugin):
                 # Class definition
                 fragment = self._extract_class(node, file_path, source_lines)
 
-                # Extract methods from the class
-                for item in node.body:
-                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                        method_fragment = self._extract_function(
-                            item, file_path, source_lines, parent_class=node.name
-                        )
-                        fragments.append(method_fragment)
+                # Only extract methods from non-Enum classes.
+                # Enum classes are self-contained (translate as a whole unit).
+                if fragment.fragment_type == FragmentType.CLASS:
+                    for item in node.body:
+                        if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                            method_fragment = self._extract_function(
+                                item, file_path, source_lines, parent_class=node.name
+                            )
+                            fragments.append(method_fragment)
 
             elif isinstance(node, ast.Assign) and hasattr(node, "lineno"):
                 # Global variable assignment (already top-level since we iterate tree.body)
@@ -135,10 +137,19 @@ class PythonPlugin(LanguagePlugin):
 
         fragment_id = f"{file_path.stem}::{node.name}"
 
+        # Detect Enum subclasses — translate as a whole unit (self-contained)
+        _enum_bases = {"Enum", "IntEnum", "StrEnum", "Flag", "IntFlag"}
+        is_enum = any(
+            (isinstance(base, ast.Name) and base.id in _enum_bases)
+            or (isinstance(base, ast.Attribute) and base.attr in _enum_bases)
+            for base in node.bases
+        )
+        fragment_type = FragmentType.ENUM if is_enum else FragmentType.CLASS
+
         return CodeFragment(
             id=fragment_id,
             name=node.name,
-            fragment_type=FragmentType.CLASS,
+            fragment_type=fragment_type,
             source_file=file_path,
             start_line=start_line + 1,
             end_line=end_line,

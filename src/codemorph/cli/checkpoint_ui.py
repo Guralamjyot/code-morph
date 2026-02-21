@@ -61,14 +61,23 @@ class CheckpointUI:
             # ... handle other actions
     """
 
-    def __init__(self, console: Console | None = None):
+    def __init__(
+        self,
+        console: Console | None = None,
+        source_lang: str = "python",
+        target_lang: str = "java",
+    ):
         """
         Initialize the checkpoint UI.
 
         Args:
             console: Rich Console instance (creates one if not provided)
+            source_lang: Source language name (for syntax highlighting)
+            target_lang: Target language name (for syntax highlighting)
         """
         self.console = console or Console()
+        self.source_lang = source_lang
+        self.target_lang = target_lang
         self._approve_all_remaining = False
         self._current_phase = 0
 
@@ -115,7 +124,9 @@ class CheckpointUI:
         self._show_metadata(fragment, translated)
 
         # Side-by-side code comparison
-        self._show_code_comparison(fragment, translated)
+        self._show_code_comparison(
+            fragment, translated, source_lang=self.source_lang, target_lang=self.target_lang
+        )
 
         # Show errors if any
         self._show_errors(translated)
@@ -142,13 +153,13 @@ class CheckpointUI:
         self.console.print()
 
     def _show_code_comparison(
-        self, fragment: CodeFragment, translated: TranslatedFragment
+        self,
+        fragment: CodeFragment,
+        translated: TranslatedFragment,
+        source_lang: str = "python",
+        target_lang: str = "java",
     ):
         """Display side-by-side source and translated code."""
-        # Determine languages for syntax highlighting
-        source_lang = "python"  # TODO: Get from config
-        target_lang = "java"  # TODO: Get from config
-
         # Source code panel
         source_syntax = Syntax(
             fragment.source_code.strip(),
@@ -157,15 +168,17 @@ class CheckpointUI:
             line_numbers=True,
             word_wrap=True,
         )
+        src_label = source_lang.title()
         source_panel = Panel(
             source_syntax,
-            title=f"[yellow]Source ({source_lang.title()})[/yellow]",
+            title=f"[yellow]◀ {src_label}[/yellow]",
             border_style="yellow",
             expand=True,
         )
 
         # Target code panel
-        target_code = translated.target_code or "// Translation failed or pending"
+        fallback = "# Translation pending" if target_lang == "python" else "// Translation pending"
+        target_code = translated.target_code or fallback
         target_syntax = Syntax(
             target_code.strip(),
             target_lang,
@@ -173,15 +186,50 @@ class CheckpointUI:
             line_numbers=True,
             word_wrap=True,
         )
+        tgt_label = target_lang.title()
         target_panel = Panel(
             target_syntax,
-            title=f"[green]Target ({target_lang.title()})[/green]",
+            title=f"[green]{tgt_label} ▶[/green]",
             border_style="green",
             expand=True,
         )
 
         # Show side-by-side
         self.console.print(Columns([source_panel, target_panel], equal=True))
+
+    def show_translation_preview(
+        self,
+        fragment: CodeFragment,
+        translated: TranslatedFragment,
+        source_lang: str = "python",
+        target_lang: str = "java",
+        index: int | None = None,
+        total: int | None = None,
+    ) -> None:
+        """
+        Display a read-only side-by-side preview of a completed translation.
+
+        Unlike show_translation_checkpoint, this does not prompt for action —
+        it's used in batch/auto modes when --show-diff is enabled.
+        """
+        self.console.print()
+        status_color = self._get_status_color(translated.status)
+        counter = f"[dim]{index + 1}/{total}[/dim]  " if index is not None and total is not None else ""
+        retries = f"  [dim](retries: {translated.retry_count})[/dim]" if translated.retry_count else ""
+        self.console.rule(
+            f"{counter}[bold cyan]{fragment.name}[/bold cyan]"
+            f"  [dim]{fragment.fragment_type.value}[/dim]"
+            f"  [{status_color}]{translated.status.value}[/{status_color}]{retries}"
+        )
+
+        # File + line range
+        self.console.print(
+            f"  [dim]{fragment.source_file}  L{fragment.start_line}–{fragment.end_line}[/dim]"
+        )
+        self.console.print()
+
+        self._show_code_comparison(fragment, translated, source_lang=source_lang, target_lang=target_lang)
+        self._show_errors(translated)
 
     def _show_errors(self, translated: TranslatedFragment):
         """Display any errors from translation."""

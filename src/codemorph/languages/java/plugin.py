@@ -73,51 +73,131 @@ class JavaPlugin(LanguagePlugin):
     # =========================================================================
 
     def extract_fragments(self, file_path: Path, tree: Any) -> list[CodeFragment]:
-        """Extract code fragments from a Java tree-sitter AST."""
+        """Extract code fragments from a Java tree-sitter AST.
+
+        Uses hierarchical (scope-aware) extraction so nested classes and enums
+        track their own methods correctly, rather than a flat depth-first walk
+        that would lose scope when re-entering parent scope after a nested class.
+        """
         fragments: list[CodeFragment] = []
 
-        # Get source code
         with open(file_path, "r", encoding="utf-8") as f:
-            source_code = f.read()
-            source_lines = source_code.split("\n")
+            source_lines = f.read().split("\n")
 
         root_node = tree.root_node
 
-        # Find package and class declarations
-        current_class = None
-
-        for node in self._traverse_tree(root_node):
+        # Only iterate direct children of the compilation unit so that scope
+        # tracking starts clean for each top-level declaration.
+        for node in root_node.children:
             if node.type == "class_declaration":
-                # Extract class
-                class_fragment = self._extract_class(node, file_path, source_lines)
-                fragments.append(class_fragment)
-                current_class = class_fragment.name
-
-            elif node.type == "method_declaration":
-                # Extract method
-                method_fragment = self._extract_method(node, file_path, source_lines, current_class)
-                fragments.append(method_fragment)
-
-            elif node.type == "field_declaration":
-                # Extract field (global variable in class context)
-                field_fragment = self._extract_field(node, file_path, source_lines, current_class)
-                if field_fragment:
-                    fragments.append(field_fragment)
-
+                self._extract_class_recursive(node, file_path, source_lines, fragments)
+            elif node.type == "enum_declaration":
+                self._extract_enum_recursive(node, file_path, source_lines, fragments)
             elif node.type == "interface_declaration":
-                # Extract interface
-                interface_fragment = self._extract_interface(node, file_path, source_lines)
-                fragments.append(interface_fragment)
+                fragments.append(self._extract_interface(node, file_path, source_lines))
 
         return fragments
 
+    def _extract_class_recursive(
+        self,
+        node: Any,
+        file_path: Path,
+        source_lines: list[str],
+        fragments: list[CodeFragment],
+        parent_class: str | None = None,
+    ) -> None:
+        """Extract a class and all its members with correct parent scope."""
+        class_fragment = self._extract_class(node, file_path, source_lines, parent_class)
+        class_name = class_fragment.name
+        fragments.append(class_fragment)
+
+        for child in node.children:
+            if child.type != "class_body":
+                continue
+            for member in child.children:
+                if member.type in ("method_declaration", "constructor_declaration"):
+                    frag = self._extract_method(member, file_path, source_lines, class_name)
+                    fragments.append(frag)
+                elif member.type == "field_declaration":
+                    frag = self._extract_field(member, file_path, source_lines, class_name)
+                    if frag:
+                        fragments.append(frag)
+                elif member.type == "class_declaration":
+                    self._extract_class_recursive(
+                        member, file_path, source_lines, fragments, class_name
+                    )
+                elif member.type == "enum_declaration":
+                    self._extract_enum_recursive(
+                        member, file_path, source_lines, fragments, class_name
+                    )
+                elif member.type == "interface_declaration":
+                    fragments.append(self._extract_interface(member, file_path, source_lines))
+
+    def _extract_enum_recursive(
+        self,
+        node: Any,
+        file_path: Path,
+        source_lines: list[str],
+        fragments: list[CodeFragment],
+        parent_class: str | None = None,
+    ) -> None:
+        """Extract an enum declaration and its methods."""
+        start_line = node.start_point[0]
+        end_line = node.end_point[0]
+        source_code = "\n".join(source_lines[start_line : end_line + 1])
+
+        enum_name = None
+        for child in node.children:
+            if child.type == "identifier":
+                enum_name = child.text.decode("utf-8")
+                break
+        if not enum_name:
+            enum_name = "UnknownEnum"
+
+        fragment_id = f"{file_path.stem}::{enum_name}"
+        enum_fragment = CodeFragment(
+            id=fragment_id,
+            name=enum_name,
+            fragment_type=FragmentType.ENUM,
+            source_file=file_path,
+            start_line=start_line + 1,
+            end_line=end_line + 1,
+            source_code=source_code,
+            parent_class=parent_class,
+        )
+        fragments.append(enum_fragment)
+
+        # Extract methods defined inside the enum body.
+        # In tree-sitter Java, methods appear inside enum_body_declarations
+        # (the section after the semicolon following the constants), not
+        # directly as children of enum_body.
+        for child in node.children:
+            if child.type != "enum_body":
+                continue
+            for member in child.children:
+                if member.type == "method_declaration":
+                    # Direct method (unusual layout, handle for safety)
+                    frag = self._extract_method(member, file_path, source_lines, enum_name)
+                    fragments.append(frag)
+                elif member.type == "enum_body_declarations":
+                    for decl in member.children:
+                        if decl.type == "method_declaration":
+                            frag = self._extract_method(decl, file_path, source_lines, enum_name)
+                            fragments.append(frag)
+
     def _traverse_tree(self, node: Any):
-        """Traverse tree-sitter tree depth-first."""
+        """Depth-first traversal (used by import extraction only)."""
         yield node
         for child in node.children:
             yield from self._traverse_tree(child)
 
-    def _extract_class(self, node: Any, file_path: Path, source_lines: list[str]) -> CodeFragment:
+    def _extract_class(
+        self,
+        node: Any,
+        file_path: Path,
+        source_lines: list[str],
+        parent_class: str | None = None,
+    ) -> CodeFragment:
         """Extract a class declaration as a CodeFragment."""
         start_line = node.start_point[0]
         end_line = node.end_point[0]
@@ -144,6 +224,7 @@ class JavaPlugin(LanguagePlugin):
             start_line=start_line + 1,
             end_line=end_line + 1,
             source_code=source_code,
+            parent_class=parent_class,
         )
 
     def _extract_param_types(self, node: Any) -> list[str]:

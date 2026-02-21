@@ -13,7 +13,7 @@ project:
 
 llm:
   provider: openrouter
-  model: "openrouter/aurora-alpha"
+  model: "openai/gpt-oss-120b"
   temperature: 0.2
 
 translation:

@@ -74,6 +74,7 @@ class FragmentType(str, Enum):
     FUNCTION = "function"
     METHOD = "method"
     CLASS = "class"
+    ENUM = "enum"
     INTERFACE = "interface"
     GLOBAL_VAR = "global_var"
     CONSTANT = "constant"
@@ -232,6 +233,10 @@ class CodeMorphConfig(BaseModel):
     translation: TranslationConfig = Field(default_factory=TranslationConfig)
     verification: VerificationConfig = Field(default_factory=VerificationConfig)
     checkpoint_mode: CheckpointMode = Field(default=CheckpointMode.BATCH)
+    show_diff: bool = Field(
+        default=False,
+        description="Show side-by-side source/target preview after each fragment is translated",
+    )
 
     def is_version_upgrade(self) -> bool:
         """Check if this is a same-language version upgrade."""

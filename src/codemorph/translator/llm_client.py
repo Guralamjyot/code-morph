@@ -383,6 +383,40 @@ Return ONLY the corrected code.
                 "between overloads."
             )
 
+        # Per-method instruction: when translating a single method, tell the LLM
+        # to output ONLY the method body (no enclosing class).
+        if fragment.fragment_type.value == "method":
+            if target_lang.lower() == "java":
+                prompt_parts.append(
+                    "\nIMPORTANT: You are translating a SINGLE Python method to Java. "
+                    "Output ONLY the Java method (access modifier + return type + name + body). "
+                    "Do NOT wrap in a class declaration. "
+                    "Do NOT include field declarations or import statements. "
+                    "The method will be integrated into a complete class in a subsequent step."
+                )
+            elif target_lang.lower() == "python":
+                prompt_parts.append(
+                    "\nIMPORTANT: You are translating a SINGLE Java method to Python. "
+                    "Output ONLY the Python method (def statement + body). "
+                    "Do NOT wrap in a class definition. "
+                    "The method will be integrated into a complete Python class in a subsequent step."
+                )
+
+        # For class fragments translated with pre-translated method context
+        if context and "translated_methods" in context:
+            methods = context["translated_methods"]
+            prompt_parts.append(
+                f"\nCONTEXT — Pre-translated {target_lang} methods for this class "
+                f"({len(methods)} method(s)). Integrate these into the complete class:"
+            )
+            for m in methods:
+                prompt_parts.append(f"\n// {m['name']}:")
+                prompt_parts.append(f"```{target_lang}\n{m['target_method'].strip()}\n```")
+            prompt_parts.append(
+                "\nIntegrate all of the above translated methods into the complete "
+                f"{target_lang} class. Keep their logic intact; adjust for cohesion as needed."
+            )
+
         # The code itself
         prompt_parts.append(f"\nCode to translate:")
         if fragment.docstring:
@@ -710,6 +744,40 @@ Return ONLY the corrected code.
                 "single method using `*args` + `isinstance` dispatch or optional "
                 "parameters with defaults. NEVER create self-recursive delegation "
                 "between overloads."
+            )
+
+        # Per-method instruction: when translating a single method, output only
+        # the method body (no enclosing class).
+        if fragment.fragment_type.value == "method":
+            if target_lang.lower() == "java":
+                prompt_parts.append(
+                    "\nIMPORTANT: You are translating a SINGLE Python method to Java. "
+                    "Output ONLY the Java method (access modifier + return type + name + body). "
+                    "Do NOT wrap in a class declaration. "
+                    "Do NOT include field declarations or import statements. "
+                    "The method will be integrated into a complete class in a subsequent step."
+                )
+            elif target_lang.lower() == "python":
+                prompt_parts.append(
+                    "\nIMPORTANT: You are translating a SINGLE Java method to Python. "
+                    "Output ONLY the Python method (def statement + body). "
+                    "Do NOT wrap in a class definition. "
+                    "The method will be integrated into a complete Python class in a subsequent step."
+                )
+
+        # For class fragments translated with pre-translated method context
+        if dependency_context and "translated_methods" in dependency_context:
+            methods = dependency_context["translated_methods"]
+            prompt_parts.append(
+                f"\nCONTEXT — Pre-translated {target_lang} methods for this class "
+                f"({len(methods)} method(s)). Integrate these into the complete class:"
+            )
+            for m in methods:
+                prompt_parts.append(f"\n// {m['name']}:")
+                prompt_parts.append(f"```{target_lang}\n{m['target_method'].strip()}\n```")
+            prompt_parts.append(
+                "\nIntegrate all of the above translated methods into the complete "
+                f"{target_lang} class. Keep their logic intact; adjust for cohesion as needed."
             )
 
         prompt_parts.append(f"\nCode to translate:")

@@ -87,19 +87,51 @@ def write_translated_files(
     output_dir.mkdir(parents=True, exist_ok=True)
     ext = ".py" if target_lang == "python" else ".java"
 
-    # Group fragments by source file
+    # ── Step 1: Find class/enum names with successful whole-class translations ──
+    # In two-pass mode, pass-1 fragments (methods, nested enums/classes, field
+    # declarations) are translated individually so pass-2 class fragments can use
+    # them as context.  Once the class is translated, the pass-1 fragments must
+    # NOT appear in the output on their own — they are already integrated into
+    # the parent's translation.  Only suppress when the parent was actually
+    # translated (not mocked or failed).
+    translated_class_names: set[str] = set()
+    for fid, tfrag in translated_fragments.items():
+        # Prefer analysis_fragments: it carries parent_class / start_line.
+        afrag = analysis_fragments.get(fid) or tfrag.get("fragment") or {}
+        ftype = afrag.get("fragment_type", "")
+        status = tfrag.get("status", "")
+        tc = tfrag.get("target_code", "")
+        if ftype in ("class", "enum") and tc.strip() and status not in ("failed", "mocked"):
+            name = afrag.get("name", "")
+            if name:
+                translated_class_names.add(name)
+
+    # ── Step 2: Group by source file, skipping context-only child fragments ──
     by_source: dict[str, list[tuple[str, dict, dict]]] = defaultdict(list)
     for fid, tfrag in translated_fragments.items():
-        afrag = tfrag.get("fragment") or analysis_fragments.get(fid, {})
+        afrag = analysis_fragments.get(fid) or tfrag.get("fragment") or {}
+        # Suppress any fragment whose parent class was translated as a whole unit.
+        # These served only as LLM context and are already inside the parent output.
+        parent_class = afrag.get("parent_class")
+        if parent_class and parent_class in translated_class_names:
+            continue
         source_file = afrag.get("source_file", "unknown")
         by_source[source_file].append((fid, tfrag, afrag))
 
     written = []
     for source_file, frags in by_source.items():
-        # Collect class-level fragments and standalone (non-method) fragments.
+        # Sort by start line so fragments appear in source order
+        frags.sort(key=lambda x: x[2].get("start_line", 0) if isinstance(x[2], dict) else getattr(x[2], "start_line", 0))
+
+        # Bucket fragments by type
         class_frags = [
             (fid, tf, af) for fid, tf, af in frags
-            if af.get("fragment_type") == "class" or "::" in fid and "." not in fid.split("::", 1)[1]
+            if af.get("fragment_type") in ("class", "enum")
+            or ("::" in fid and "." not in fid.split("::", 1)[1])
+        ]
+        method_frags = [
+            (fid, tf, af) for fid, tf, af in frags
+            if af.get("fragment_type") == "method"
         ]
         standalone_frags = [
             (fid, tf, af) for fid, tf, af in frags
@@ -113,16 +145,13 @@ def write_translated_files(
                 tc = tf.get("target_code", "")
                 if not tc.strip():
                     continue
-                # Extract class name from the translated code
                 class_name = _extract_java_class_name(tc)
                 if not class_name:
-                    # Fallback: use fragment name
                     class_name = af.get("name", fid.split("::")[-1])
                 out_path = output_dir / f"{class_name}.java"
                 out_path.write_text(tc + "\n", encoding="utf-8")
                 written.append(out_path)
 
-            # Standalone functions go into Main.java (or similar)
             for fid, tf, af in standalone_frags:
                 tc = tf.get("target_code", "")
                 if not tc.strip():
@@ -133,6 +162,7 @@ def write_translated_files(
                 out_path = output_dir / f"{class_name}.java"
                 out_path.write_text(tc + "\n", encoding="utf-8")
                 written.append(out_path)
+
         else:
             # Python: group by source file
             stem = Path(source_file).stem
@@ -140,16 +170,45 @@ def write_translated_files(
             out_path = output_dir / f"{stem}{ext}"
 
             parts = []
-            for fid, tf, af in class_frags:
-                tc = tf.get("target_code", "")
-                if tc.strip():
-                    parts.append(tc)
+
+            if class_frags:
+                # Whole-class translations available — use them directly
+                for fid, tf, af in class_frags:
+                    tc = tf.get("target_code", "")
+                    if tc.strip():
+                        parts.append(tc)
+            elif method_frags:
+                # J2P method-by-method mode: group translated methods by parent
+                # class and wrap them in Python class blocks.
+                from collections import OrderedDict
+                classes: dict[str, list[str]] = OrderedDict()
+                orphan_methods: list[str] = []
+
+                for fid, tf, af in method_frags:
+                    tc = tf.get("target_code", "")
+                    if not tc.strip():
+                        continue
+                    parent = af.get("parent_class")
+                    if parent:
+                        classes.setdefault(parent, []).append(tc.strip())
+                    else:
+                        orphan_methods.append(tc.strip())
+
+                for class_name, methods in classes.items():
+                    method_block = "\n\n".join(
+                        "\n".join("    " + line for line in m.split("\n"))
+                        for m in methods
+                    )
+                    parts.append(f"class {class_name}:\n{method_block}")
+
+                parts.extend(orphan_methods)
+
             for fid, tf, af in standalone_frags:
                 tc = tf.get("target_code", "")
                 if tc.strip():
                     parts.append(tc)
-            code = "\n\n".join(parts)
 
+            code = "\n\n\n".join(parts)
             if not code.strip():
                 continue
 
@@ -177,6 +236,7 @@ def translate(
     build_system: Optional[str] = typer.Option(None, "--build-system", help="Build system for Java (maven/gradle)"),
     package_name: Optional[str] = typer.Option(None, "--package-name", help="Base package name for Java"),
     checkpoint_mode: str = typer.Option("batch", "--checkpoint-mode", help="Checkpoint mode (interactive/batch/auto)"),
+    show_diff: bool = typer.Option(False, "--show-diff", help="Show side-by-side source/target preview after each fragment"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
 ):
     """
@@ -227,6 +287,9 @@ def translate(
                 test_dir=Path(test_dir) if test_dir else None,
                 checkpoint_mode=CheckpointMode(checkpoint_mode),
             )
+
+        # Apply CLI-level overrides that aren't in YAML
+        cfg.show_diff = show_diff
 
         # Display configuration
         display_config(cfg, verbose)
@@ -422,6 +485,8 @@ def translate(
                     "source_file": str(af.source_file) if hasattr(af, "source_file") else "",
                     "fragment_type": af.fragment_type.value if hasattr(af, "fragment_type") else "",
                     "name": af.name if hasattr(af, "name") else "",
+                    "parent_class": af.parent_class if hasattr(af, "parent_class") else None,
+                    "start_line": af.start_line if hasattr(af, "start_line") else 0,
                 }
         written_files = write_translated_files(
             tfrag_dicts,

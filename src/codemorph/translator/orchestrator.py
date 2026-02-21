@@ -11,7 +11,6 @@ This orchestrator coordinates the type-driven translation phase, which includes:
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from threading import Lock
 from typing import Any
 
 from rich.console import Console
@@ -61,11 +60,18 @@ class Phase2Orchestrator:
         # Initialize symbol registry (per-project symbol tracking)
         self.symbol_registry = SymbolRegistry(config.project.state_dir)
 
-        # Initialize checkpoint UI if interactive mode
+        # Initialize checkpoint UI if interactive mode OR show_diff is enabled
         self.checkpoint_ui = None
-        if config.checkpoint_mode == CheckpointMode.INTERACTIVE:
+        if config.checkpoint_mode == CheckpointMode.INTERACTIVE or getattr(config, "show_diff", False):
             from codemorph.cli.checkpoint_ui import CheckpointUI
-            self.checkpoint_ui = CheckpointUI()
+            self.checkpoint_ui = CheckpointUI(
+                source_lang=config.project.source.language.value,
+                target_lang=config.project.target.language.value,
+            )
+
+        self._show_diff = getattr(config, "show_diff", False)
+        self._source_lang = config.project.source.language.value
+        self._target_lang = config.project.target.language.value
 
         # Stats tracking
         self.stats = {
@@ -118,98 +124,56 @@ class Phase2Orchestrator:
                 f"merging at translation time[/cyan]\n"
             )
 
-        # Build set of class-level fragment IDs to skip redundant method translations.
-        # When translating Python→Java, class-level fragments already contain all methods;
-        # translating individual methods separately is redundant and causes compilation
-        # failures (Java requires a class wrapper).
-        class_fragment_ids = {
-            fid for fid in translation_order
-            if fid in fragments and fragments[fid].fragment_type.value == "class"
-        }
-        # Map: "file::ClassName" → True for classes that have class-level fragments
-        class_parents = set()
-        for fid in class_fragment_ids:
-            # Extract "file::ClassName" from fragment ID
-            class_parents.add(fid)
+        _target_is_java = self.config.project.target.language.value == "java"
+        _source_is_java = self.config.project.source.language.value == "java"
+        # Two-pass is needed when translating between Java and Python:
+        # methods/enums are translated first so the class can use them as context.
+        _needs_two_pass = _target_is_java or _source_is_java
 
-        # Separate fragments into: secondary overloads (instant) vs needs-translation
-        to_translate: list[tuple[int, str, CodeFragment]] = []
-        skipped_methods = 0
+        # Build to_translate — all fragments (no skipping); class fragments
+        # will be reordered to come after non-class fragments.
+        pass1: list[tuple[int, str, CodeFragment]] = []  # methods, enums, functions
+        pass2: list[tuple[int, str, CodeFragment]] = []  # class fragments (deferred)
+
         for idx, fragment_id in enumerate(translation_order):
             fragment = fragments[fragment_id]
             if fragment_id in merged_overloads:
                 # Defer secondary overloads — handle after primaries are done
                 continue
-            # Skip method-level fragments when parent class fragment exists
-            if (fragment.fragment_type.value == "method"
-                    and fragment.parent_class
-                    and f"{fragment.source_file.stem}::{fragment.parent_class}" in class_parents):
-                skipped_methods += 1
-                continue
-            to_translate.append((idx, fragment_id, fragment))
 
-        if skipped_methods:
+            if _needs_two_pass and fragment.fragment_type.value == "class":
+                pass2.append((idx, fragment_id, fragment))
+            else:
+                pass1.append((idx, fragment_id, fragment))
+
+        to_translate = pass1 + pass2
+
+        if pass2 and _needs_two_pass:
+            direction = "P2J" if _target_is_java else "J2P"
             console.print(
-                f"[cyan]Skipping {skipped_methods} method fragments "
-                f"(included in class-level translations)[/cyan]\n"
-            )
-            self.stats["total"] -= skipped_methods
-
-        # Lock for console/progress output (Rich is not thread-safe)
-        print_lock = Lock()
-
-        # Translate fragments: serial for Java (compile-time deps), parallel for others
-        if self.config.project.target.language.value == "java":
-            max_workers = 1  # Java requires sequential compilation for cross-class refs
-        else:
-            max_workers = min(4, len(to_translate)) if to_translate else 1
-
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TaskProgressColumn(),
-            console=console,
-        ) as progress:
-            task = progress.add_task(
-                "Translating fragments...", total=len(translation_order)
+                f"[cyan]{direction} two-pass translation: {len(pass1)} method(s)/enum(s) first, "
+                f"then {len(pass2)} class(es) with method context[/cyan]\n"
             )
 
-            def _do_translate(item):
-                idx, fid, frag = item
-                return (fid, frag, self._translate_fragment(frag, idx, len(translation_order)))
+        self.stats["total"] = len(to_translate)
 
-            results: dict[str, TranslatedFragment] = {}
+        results: dict[str, TranslatedFragment] = {}
 
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = {
-                    executor.submit(_do_translate, item): item
-                    for item in to_translate
-                }
-                for future in as_completed(futures):
-                    fid, frag, translated = future.result()
-                    results[fid] = translated
+        def _update_stats(tf: TranslatedFragment) -> None:
+            if tf.status == TranslationStatus.COMPILED:
+                self.stats["compiled"] += 1
+            elif tf.status == TranslationStatus.TYPE_VERIFIED:
+                self.stats["type_verified"] += 1
+            elif tf.status == TranslationStatus.FAILED:
+                self.stats["failed"] += 1
+            elif tf.status == TranslationStatus.MOCKED:
+                self.stats["mocked"] += 1
+            elif tf.status == TranslationStatus.HUMAN_REVIEW:
+                self.stats["human_reviewed"] += 1
 
-                    # Save to state
-                    self.state.update_fragment(translated)
-                    self.state.current_fragment_index += 1
-
-                    # Update stats
-                    if translated.status == TranslationStatus.COMPILED:
-                        self.stats["compiled"] += 1
-                    elif translated.status == TranslationStatus.TYPE_VERIFIED:
-                        self.stats["type_verified"] += 1
-                    elif translated.status == TranslationStatus.FAILED:
-                        self.stats["failed"] += 1
-                    elif translated.status == TranslationStatus.MOCKED:
-                        self.stats["mocked"] += 1
-                    elif translated.status == TranslationStatus.HUMAN_REVIEW:
-                        self.stats["human_reviewed"] += 1
-
-                    progress.advance(task)
-
-            # Now handle secondary overloads (copy from primary results)
-            for idx, fragment_id in enumerate(translation_order):
+        def _handle_overloads(use_progress: bool = False, progress=None, task=None) -> None:
+            """Copy secondary overload results from their primaries."""
+            for fragment_id in translation_order:
                 if fragment_id not in merged_overloads:
                     continue
                 fragment = fragments[fragment_id]
@@ -230,21 +194,98 @@ class Phase2Orchestrator:
                     self._register_symbol(fragment, translated)
                     self.state.update_fragment(translated)
                     self.state.current_fragment_index += 1
-                    if translated.status == TranslationStatus.COMPILED:
-                        self.stats["compiled"] += 1
-                    elif translated.status == TranslationStatus.TYPE_VERIFIED:
-                        self.stats["type_verified"] += 1
+                    _update_stats(translated)
                 else:
                     console.print(
                         f"[yellow]⚠[/yellow] Primary overload {primary_fid} not found for {fragment_id}"
                     )
-
-                progress.advance(task)
-
-                # Periodic state saves (every 10 fragments)
+                if use_progress and progress is not None:
+                    progress.advance(task)
                 if self.state.current_fragment_index % 10 == 0:
                     self.state.save()
                     self.symbol_registry.save()
+
+        if self._show_diff:
+            # ── Show-diff mode: sequential, no live bar, Enter pause between each ──
+            total_frags = len(to_translate)
+            for item_idx, (idx, fid, frag) in enumerate(to_translate):
+                translated = self._translate_fragment(frag, idx, len(translation_order))
+                results[fid] = translated
+                self.state.update_fragment(translated)
+                self.state.current_fragment_index += 1
+                _update_stats(translated)
+
+                self.checkpoint_ui.show_translation_preview(
+                    frag,
+                    translated,
+                    source_lang=self._source_lang,
+                    target_lang=self._target_lang,
+                    index=item_idx,
+                    total=total_frags,
+                )
+
+                if item_idx < total_frags - 1:
+                    try:
+                        console.input("\n[dim]── Press Enter for next fragment ──[/dim]")
+                    except EOFError:
+                        pass  # non-interactive / piped stdin — skip pause
+
+                if self.state.current_fragment_index % 10 == 0:
+                    self.state.save()
+                    self.symbol_registry.save()
+
+            _handle_overloads(use_progress=False)
+
+        else:
+            # ── Normal mode: parallel / serial with live Progress bar ──
+            # Pass 1 (methods/enums) may run in parallel; Pass 2 (classes)
+            # always runs sequentially so method context is available.
+            if self.config.project.target.language.value == "java":
+                max_workers_p1 = 1
+            else:
+                max_workers_p1 = min(4, len(pass1)) if pass1 else 1
+
+            def _do_translate(item):
+                idx, fid, frag = item
+                return (fid, frag, self._translate_fragment(frag, idx, len(translation_order)))
+
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TaskProgressColumn(),
+                console=console,
+            ) as progress:
+                task = progress.add_task(
+                    "Translating fragments...", total=len(to_translate)
+                )
+
+                # ── Pass 1: methods, enums, functions, globals ──
+                with ThreadPoolExecutor(max_workers=max_workers_p1) as executor:
+                    futures = {
+                        executor.submit(_do_translate, item): item
+                        for item in pass1
+                    }
+                    for future in as_completed(futures):
+                        fid, frag, translated = future.result()
+                        results[fid] = translated
+                        self.state.update_fragment(translated)
+                        self.state.current_fragment_index += 1
+                        _update_stats(translated)
+                        progress.advance(task)
+
+                # ── Pass 2: class fragments (sequential, method context available) ──
+                if pass2:
+                    progress.update(task, description="Translating classes (with method context)...")
+                    for item in pass2:
+                        fid, frag, translated = _do_translate(item)
+                        results[fid] = translated
+                        self.state.update_fragment(translated)
+                        self.state.current_fragment_index += 1
+                        _update_stats(translated)
+                        progress.advance(task)
+
+                _handle_overloads(use_progress=True, progress=progress, task=task)
 
         # Final save
         self.state.current_phase = 2
@@ -317,6 +358,18 @@ class Phase2Orchestrator:
                     overload_sources = self._get_overload_sources(fragment)
                     if overload_sources:
                         context["overload_sources"] = overload_sources
+                    # For class fragments: inject already-translated methods
+                    # as context so the LLM can produce a coherent whole class.
+                    if fragment.fragment_type.value == "class":
+                        translated_methods = self._get_translated_methods_for_class(
+                            fragment.name
+                        )
+                        if translated_methods:
+                            context["translated_methods"] = translated_methods
+                            console.print(
+                                f"  [dim]Using {len(translated_methods)} pre-translated "
+                                f"method(s) as context[/dim]"
+                            )
                     target_code, conversation = self.llm_client.translate_fragment(
                         fragment=fragment,
                         source_lang=self.config.project.source.language.value,
@@ -358,6 +411,21 @@ class Phase2Orchestrator:
                     translated.compilation_errors = [failure_msg]
                     retry_count += 1
                     continue
+
+                # Individual method fragments targeting Java can't compile
+                # standalone — they'll be integrated into the full class
+                # translation (Pass 2) which compiles the complete class.
+                if (
+                    self.config.project.target.language.value == "java"
+                    and fragment.fragment_type.value == "method"
+                ):
+                    translated.status = TranslationStatus.TRANSLATED
+                    translated.compilation_errors = []
+                    console.print(
+                        f"  [green]✓[/green] Method translated "
+                        f"(compilation deferred to class assembly)"
+                    )
+                    break
 
                 # Try to compile
                 compilation_success, errors = self._compile_fragment(
@@ -420,9 +488,12 @@ class Phase2Orchestrator:
 
         translated.retry_count = retry_count
 
-        # Interactive checkpoint (if enabled)
-        if self.checkpoint_ui and translated.status not in (
-            TranslationStatus.FAILED,
+        # Interactive checkpoint (only in INTERACTIVE mode, not show_diff mode)
+        if (
+            self.checkpoint_ui
+            and not self._show_diff
+            and self.config.checkpoint_mode == CheckpointMode.INTERACTIVE
+            and translated.status not in (TranslationStatus.FAILED,)
         ):
             translated = self._handle_checkpoint(fragment, translated, index, total)
 
@@ -664,6 +735,36 @@ class Phase2Orchestrator:
         self.state.save()
         self.symbol_registry.save()
         console.print("\n[green]Overload re-translation complete. State saved.[/green]")
+
+    def _get_translated_methods_for_class(self, class_name: str) -> list[dict]:
+        """
+        Return all already-translated method snippets for a given parent class.
+
+        Called when translating a class fragment so the LLM can see how each
+        method was individually translated and produce a coherent whole class.
+
+        Args:
+            class_name: The name of the parent class (e.g. "Product")
+
+        Returns:
+            List of dicts with keys: name, python_source (or java_source), target_method
+        """
+        methods = []
+        for tf in self.state.translated_fragments.values():
+            frag = tf.fragment
+            if (
+                frag.parent_class == class_name
+                and frag.fragment_type.value == "method"
+                and tf.target_code
+                and tf.target_code.strip()
+                and tf.status not in (TranslationStatus.FAILED,)
+            ):
+                methods.append({
+                    "name": frag.name,
+                    "source_method": frag.source_code,
+                    "target_method": tf.target_code,
+                })
+        return methods
 
     def _get_dependency_context(self, fragment: CodeFragment) -> list[dict[str, str]]:
         """
